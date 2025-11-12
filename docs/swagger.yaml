@@ -1,0 +1,17 @@
+basePath: /
+host: localhost:3000
+info:
+  contact: {}
+  description: API sederhana untuk operasi CRUD menggunakan Fiber dan MongoDB
+  title: CRUD APPLICATION
+  version: "1.0"
+paths: {}
+schemes:
+- http
+securityDefinitions:
+  ApiKeyAuth:
+    description: '"JWT Token dengan prefix ''Bearer ''"'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

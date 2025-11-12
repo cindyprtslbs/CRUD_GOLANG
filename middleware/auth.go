@@ -10,7 +10,6 @@ import (
 // Middleware untuk memerlukan login
 func AuthRequired() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Ambil token dari header Authorization
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
 			return c.Status(401).JSON(fiber.Map{
@@ -18,7 +17,6 @@ func AuthRequired() fiber.Handler {
 			})
 		}
 
-		// Extract token dari "Bearer TOKEN"
 		tokenParts := strings.Split(authHeader, " ")
 		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
 			return c.Status(401).JSON(fiber.Map{
@@ -26,7 +24,6 @@ func AuthRequired() fiber.Handler {
 			})
 		}
 
-		// Validasi token
 		claims, err := utils.ValidateToken(tokenParts[1])
 		if err != nil {
 			return c.Status(401).JSON(fiber.Map{
@@ -34,10 +31,15 @@ func AuthRequired() fiber.Handler {
 			})
 		}
 
-		// Simpan informasi user di context
-		c.Locals("user_id", claims.UserID)
+		// Simpan data user ke context
+		c.Locals("user_id", claims.UserID.Hex())
 		c.Locals("username", claims.Username)
 		c.Locals("role", claims.Role)
+
+		// Penting untuk alumni!
+		if claims.AlumniID != "" {
+			c.Locals("alumni_id", claims.AlumniID)
+		}
 
 		return c.Next()
 	}
@@ -46,12 +48,14 @@ func AuthRequired() fiber.Handler {
 // Middleware untuk memerlukan role admin
 func AdminOnly() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		role := c.Locals("role").(string)
-		if role != "admin" {
-			return c.Status(403).JSON(fiber.Map{
+		roleValue := c.Locals("role")
+		role, ok := roleValue.(string)
+		if !ok || role != "admin" {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"error": "Akses ditolak, hanya admin yang diizinkan",
 			})
 		}
 		return c.Next()
 	}
 }
+

@@ -1,12 +1,16 @@
 package service
 
 import (
+	"context"
+	"errors"
+	"time"
+
 	models "crud-app/app/model"
 	"crud-app/app/repository"
 	"crud-app/utils"
-	"database/sql"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type AuthService struct {
@@ -17,46 +21,58 @@ func NewAuthService(r repository.AuthRepository) *AuthService {
 	return &AuthService{repo: r}
 }
 
+// @Summary Login user
+// @Description Login dengan username dan password
+// @Accept json
+// @Produce json
+// @Param loginRequest body models.LoginRequest true "Login Request"
+// @Success 200 {object} fiber.Map
+// @Failure 400 {object} fiber.Map
+// @Failure 401 {object} fiber.Map
+// @Router /api/login [post]
 func (s *AuthService) Login(c *fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	var req models.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Request body tidak valid",
 		})
 	}
 
 	// Validasi input
 	if req.Username == "" || req.Password == "" {
-		return c.Status(400).JSON(fiber.Map{
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Username dan password harus diisi",
 		})
 	}
 
-	// Ambil user berdasarkan username
-	user, passwordHash, err := s.repo.GetByUsername(req.Username)
+	// Ambil user dari MongoDB
+	user, passwordHash, err := s.repo.GetByUsername(ctx, req.Username)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return c.Status(401).JSON(fiber.Map{
+		if errors.Is(err, mongo.ErrNoDocuments) || user == nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Username atau password salah",
 			})
 		}
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Error database",
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Gagal mengambil data user dari database",
 		})
 	}
 
-	// Cek password
+	// Cek password hash
 	if !utils.CheckPasswordHash(req.Password, passwordHash) {
-		return c.Status(401).JSON(fiber.Map{
-			"error": "Username atau password salah",
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Username atau password Hash salah",
 		})
 	}
 
-	// Generate JWT
+	// Generate JWT token
 	token, err := utils.GenerateToken(*user)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Gagal generate token",
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Gagal membuat token autentikasi",
 		})
 	}
 
@@ -65,19 +81,26 @@ func (s *AuthService) Login(c *fiber.Ctx) error {
 		Token: token,
 	}
 
-	return c.JSON(fiber.Map{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Login berhasil",
 		"data":    response,
 	})
 }
 
+// @Summary Get user profile
+// @Description Get profile dari user yang sedang login
+// @Produce json
+// @Success 200 {object} fiber.Map
+// @Failure 401 {object} fiber.Map
+// @Security Bearer
+// @Router /api/profile [get]
 func (s *AuthService) GetProfile(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(int)
-	username := c.Locals("username").(string)
-	role := c.Locals("role").(string)
+	userID := c.Locals("user_id")
+	username := c.Locals("username")
+	role := c.Locals("role")
 
-	return c.JSON(fiber.Map{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Profile berhasil diambil",
 		"data": fiber.Map{

@@ -1,46 +1,63 @@
 package repository
 
 import (
-	models "crud-app/app/model"
-	"database/sql"
+	"context"
+	"errors"
 	"fmt"
+
+	models "crud-app/app/model"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// Interface AuthRepository mendefinisikan kontrak fungsi yang bisa digunakan oleh service
 type AuthRepository interface {
-	GetByUsername(username string) (*models.User, string, error)
+	GetByUsername(ctx context.Context, username string) (*models.User, string, error)
 }
 
+// Struktur utama repository
 type authRepository struct {
-	db *sql.DB
+	collection *mongo.Collection
 }
 
-func NewAuthRepository(db *sql.DB) AuthRepository {
-	return &authRepository{db: db}
+// Fungsi konstruktor untuk inisialisasi repository
+func NewAuthRepository(database *mongo.Database) AuthRepository {
+	return &authRepository{
+		collection: database.Collection("users"), // ganti sesuai nama collection kamu
+	}
 }
 
-func (r *authRepository) GetByUsername(username string) (*models.User, string, error) {
+// GetByUsername mencari user berdasarkan username atau email
+func (r *authRepository) GetByUsername(ctx context.Context, username string) (*models.User, string, error) {
 	var user models.User
-	var passwordHash string
 
-	err := r.db.QueryRow(`
-		SELECT id, username, email, password_hash, role, alumni_id, created_at, is_active
-		FROM users
-		WHERE (username = $1 OR email = $1)
-		  AND is_active = TRUE
-	`, username).Scan(
-		&user.ID,
-		&user.Username,
-		&user.Email,
-		&passwordHash,
-		&user.Role,
-		&user.AlumniID,
-		&user.CreatedAt,
-		&user.IsActive,
-	)
+	// Filter: mencari username atau email yang aktif
+	filter := bson.M{
+		"$and": []bson.M{
+			{
+				"$or": []bson.M{
+					{"username": username},
+					{"email": username},
+				},
+			},
+			{"is_active": true},
+		},
+	}
 
+	// Ambil data dari MongoDB
+	err := r.collection.FindOne(ctx, filter).Decode(&user)
 	if err != nil {
-		fmt.Println("GetByUsername error:", err)
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, "", fmt.Errorf("user tidak ditemukan")
+		}
 		return nil, "", err
+	}
+
+	// Ambil password hash dari field PasswordHash (pastikan field ini ada di model)
+	passwordHash := user.PasswordHash
+	if passwordHash == "" {
+		return nil, "", fmt.Errorf("password hash tidak ditemukan di data user")
 	}
 
 	return &user, passwordHash, nil

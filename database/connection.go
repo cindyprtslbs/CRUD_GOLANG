@@ -1,29 +1,40 @@
 package database
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"log"
+	"os"
+	"time"
 
-	_ "github.com/lib/pq"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var DB *sql.DB
+var DB *mongo.Database
 
-func ConnectDB() {
-	var err error
+func ConnectMongo() *mongo.Database {
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		mongoURI = "mongodb://localhost:27017"
+		log.Println("MONGO_URI tidak disetel. Menggunakan default:", mongoURI)
+	}
 
-	dsn := "host=localhost user=postgres password=@cindy1501 dbname=alumni_db port=5432 sslmode=disable"
+	clientOptions := options.Client().ApplyURI(mongoURI)
 
-	DB, err = sql.Open("postgres", dsn)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
-		log.Fatal("Gagal koneksi ke database:", err)
+		log.Fatalf("Gagal konek ke MongoDB: %v", err)
 	}
-	if err = DB.Ping(); err != nil {
-		log.Fatal("Gagal ping database:", err)
+
+	if err := client.Ping(ctx, nil); err != nil {
+		log.Fatalf("Gagal ping MongoDB: %v", err)
 	}
-	fmt.Println("Berhasil terhubung ke database PostgreSQL")
+
+	fmt.Println("🎉 Berhasil terhubung ke MongoDB!")
+	DB = client.Database("alumnidb")
+	return DB
 }
-
-
-

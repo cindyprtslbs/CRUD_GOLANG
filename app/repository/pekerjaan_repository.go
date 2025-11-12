@@ -1,518 +1,368 @@
 package repository
 
 import (
-	models "crud-app/app/model"
-	"database/sql"
+	"context"
 	"fmt"
 	"log"
 	"time"
+
+	models "crud-app/app/model"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type PekerjaanRepository interface {
-	GetAll() ([]models.Pekerjaan, error)
-	GetByID(id int) (*models.Pekerjaan, error)
-	GetByAlumniID(alumniID int) ([]models.Pekerjaan, error)
-	Create(req models.CreatePekerjaanRequest) (*models.Pekerjaan, error)
-	Update(id int, req models.UpdatePekerjaanRequest) (*models.Pekerjaan, error)
-	// Delete(id int) error
-	SoftDeleteByID(id int) error
-	SoftDeleteByOwner(id, alumniID int) error
-	RestoreByID(id int) error
-	RestoreByOwner(id, alumniID int) error
-	GetAlumniIDByPekerjaan(id int) (int, error)
-	GetUserByID(id int) (*models.User, error)
-
-	GetBekerjalebih1Tahun() ([]models.AlumniWithPekerjaan, error)
-	GetPekerjaanRepo(search, sortBy, order string, limit, offset int) ([]models.Pekerjaan, error)
-	CountPekerjaanRepo(search string) (int, error)
-
-	GetTrash() ([]models.Pekerjaan, error)
-	GetTrashByOwner(alumniID int) ([]models.Pekerjaan, error)
-	Delete(id int, alumniID *int) error
-	Restore(id int, alumniID *int) error
+	GetAll(ctx context.Context) ([]models.Pekerjaan, error)
+	GetByID(ctx context.Context, id string) (*models.Pekerjaan, error)
+	GetByAlumniID(ctx context.Context, alumniID string) ([]models.Pekerjaan, error)
+	Create(ctx context.Context, req *models.CreatePekerjaanRequest) (*models.Pekerjaan, error)
+	Update(ctx context.Context, id string, req *models.UpdatePekerjaanRequest) (*models.Pekerjaan, error)
+	SoftDeleteByID(ctx context.Context, id string) error
+	SoftDeleteByOwner(ctx context.Context, id, alumniID string) error
+	Restore(ctx context.Context, id string, alumniID *string, role string) error
+	GetTrash(ctx context.Context) ([]models.Trash, error)
+	GetTrashByOwner(ctx context.Context, alumniID string) ([]models.Trash, error)
+	Delete(ctx context.Context, id string, alumniID *string) error
+	GetPekerjaanRepo(ctx context.Context, search, sortBy, order string, limit, offset int64) ([]models.Pekerjaan, error)
+	CountPekerjaanRepo(ctx context.Context, search string) (int64, error)
 }
 
 type pekerjaanRepository struct {
-	db *sql.DB
+	collection      *mongo.Collection
+	trashCollection *mongo.Collection
 }
 
-func NewPekerjaanRepository(db *sql.DB) PekerjaanRepository {
-	return &pekerjaanRepository{db: db}
-}
-
-// GET ALL
-func (r *pekerjaanRepository) GetAll() ([]models.Pekerjaan, error) {
-	rows, err := r.db.Query(`
-        SELECT id, alumni_id, nama_perusahaan, posisi_jabatan, bidang_industri, lokasi_kerja, gaji_range, 
-		tanggal_mulai_kerja, tanggal_selesai_kerja, status_pekerjaan, deskripsi_pekerjaan, created_at, updated_at
-        FROM pekerjaan_alumni 
-        WHERE is_deleted = FALSE
-        ORDER BY created_at DESC
-    `)
-	if err != nil {
-		return nil, err
+func NewPekerjaanRepository(database *mongo.Database) PekerjaanRepository {
+	return &pekerjaanRepository{
+		collection:      database.Collection("pekerjaan_alumni"),
+		trashCollection: database.Collection("trash_pekerjaan"),
 	}
-	defer rows.Close()
+}
 
-	var list []models.Pekerjaan
-	for rows.Next() {
-		var p models.Pekerjaan
-		err := rows.Scan(
-			&p.ID, &p.AlumniID, &p.NamaPerusahaan, &p.PosisiJabatan, &p.BidangIndustri,
-			&p.LokasiKerja, &p.GajiRange, &p.TanggalMulaiKerja, &p.TanggalSelesaiKerja,
-			&p.StatusPekerjaan, &p.DeskripsiPekerjaan, &p.CreatedAt, &p.UpdatedAt,
-		)
+// ========================== CREATE ==========================
+func (r *pekerjaanRepository) Create(ctx context.Context, req *models.CreatePekerjaanRequest) (*models.Pekerjaan, error) {
+	alumniObjID, err := primitive.ObjectIDFromHex(req.AlumniID)
+	if err != nil {
+		return nil, fmt.Errorf("alumni_id tidak valid: %v", err)
+	}
+
+	tglMulai, err := time.Parse(time.RFC3339, req.TanggalMulaiKerja)
+	if err != nil {
+		return nil, fmt.Errorf("format tanggal_mulai_kerja tidak valid")
+	}
+
+	var tglSelesaiPtr *time.Time
+	if req.TanggalSelesaiKerja != "" {
+		tglSelesai, err := time.Parse(time.RFC3339, req.TanggalSelesaiKerja)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("format tanggal_selesai_kerja tidak valid")
 		}
-		list = append(list, p)
-	}
-	return list, nil
-}
-
-// GET BY ID
-func (r *pekerjaanRepository) GetByID(id int) (*models.Pekerjaan, error) {
-	var p models.Pekerjaan
-	row := r.db.QueryRow(`
-		SELECT id, alumni_id, nama_perusahaan, posisi_jabatan, bidang_industri, lokasi_kerja,
-		       gaji_range, tanggal_mulai_kerja, tanggal_selesai_kerja, status_pekerjaan, 
-		       deskripsi_pekerjaan, created_at, updated_at, is_deleted
-		FROM pekerjaan_alumni 
-		WHERE id=$1
-	`, id)
-
-	err := row.Scan(
-		&p.ID, &p.AlumniID, &p.NamaPerusahaan, &p.PosisiJabatan, &p.BidangIndustri,
-		&p.LokasiKerja, &p.GajiRange, &p.TanggalMulaiKerja, &p.TanggalSelesaiKerja,
-		&p.StatusPekerjaan, &p.DeskripsiPekerjaan, &p.CreatedAt, &p.UpdatedAt, &p.IsDeleted,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &p, nil
-}
-
-// GET BY ALUMNI ID
-func (r *pekerjaanRepository) GetByAlumniID(alumniID int) ([]models.Pekerjaan, error) {
-	rows, err := r.db.Query(`
-		SELECT id, alumni_id, nama_perusahaan, posisi_jabatan, bidang_industri, lokasi_kerja,
-		gaji_range, tanggal_mulai_kerja, tanggal_selesai_kerja, status_pekerjaan, deskripsi_pekerjaan,
-		created_at, updated_at
-		FROM pekerjaan_alumni 
-		WHERE alumni_id=$1 AND is_deleted=FALSE
-		ORDER BY created_at DESC`, alumniID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var list []models.Pekerjaan
-	for rows.Next() {
-		var p models.Pekerjaan
-		if err := rows.Scan(&p.ID, &p.AlumniID, &p.NamaPerusahaan, &p.PosisiJabatan, &p.BidangIndustri,
-			&p.LokasiKerja, &p.GajiRange, &p.TanggalMulaiKerja, &p.TanggalSelesaiKerja,
-			&p.StatusPekerjaan, &p.DeskripsiPekerjaan, &p.CreatedAt, &p.UpdatedAt); err != nil {
-			return nil, err
-		}
-		list = append(list, p)
-	}
-	return list, nil
-}
-
-// CREATE
-func (r *pekerjaanRepository) Create(req models.CreatePekerjaanRequest) (*models.Pekerjaan, error) {
-	var id int
-	err := r.db.QueryRow(`
-		INSERT INTO pekerjaan_alumni (alumni_id, nama_perusahaan, posisi_jabatan, bidang_industri, lokasi_kerja,
-		gaji_range, tanggal_mulai_kerja, tanggal_selesai_kerja, status_pekerjaan, deskripsi_pekerjaan, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id
-	`, req.AlumniID, req.NamaPerusahaan, req.PosisiJabatan, req.BidangIndustri, req.LokasiKerja,
-		req.GajiRange, req.TanggalMulaiKerja, req.TanggalSelesaiKerja, req.StatusPekerjaan,
-		req.DeskripsiPekerjaan, time.Now(), time.Now()).Scan(&id)
-
-	if err != nil {
-		return nil, err
+		tglSelesaiPtr = &tglSelesai
 	}
 
-	var newPekerjaan models.Pekerjaan
-	row := r.db.QueryRow(`
-		SELECT id, alumni_id, nama_perusahaan, posisi_jabatan, bidang_industri, lokasi_kerja,
-		gaji_range, tanggal_mulai_kerja, tanggal_selesai_kerja, status_pekerjaan, deskripsi_pekerjaan, created_at, updated_at
-		FROM pekerjaan_alumni WHERE id=$1
-	`, id)
+	newPekerjaan := models.Pekerjaan{
+		ID:                  primitive.NewObjectID(),
+		AlumniID:            alumniObjID,
+		NamaPerusahaan:      req.NamaPerusahaan,
+		PosisiJabatan:       req.PosisiJabatan,
+		BidangIndustri:      req.BidangIndustri,
+		LokasiKerja:         req.LokasiKerja,
+		GajiRange:           req.GajiRange,
+		TanggalMulaiKerja:   tglMulai,
+		TanggalSelesaiKerja: tglSelesaiPtr,
+		StatusPekerjaan:     req.StatusPekerjaan,
+		DeskripsiPekerjaan:  req.DeskripsiPekerjaan,
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
+	}
 
-	err = row.Scan(
-		&newPekerjaan.ID, &newPekerjaan.AlumniID, &newPekerjaan.NamaPerusahaan, &newPekerjaan.PosisiJabatan, &newPekerjaan.BidangIndustri,
-		&newPekerjaan.LokasiKerja, &newPekerjaan.GajiRange, &newPekerjaan.TanggalMulaiKerja, &newPekerjaan.TanggalSelesaiKerja,
-		&newPekerjaan.StatusPekerjaan, &newPekerjaan.DeskripsiPekerjaan, &newPekerjaan.CreatedAt, &newPekerjaan.UpdatedAt,
-	)
+	_, err = r.collection.InsertOne(ctx, newPekerjaan)
 	if err != nil {
 		return nil, err
 	}
 	return &newPekerjaan, nil
 }
 
-// UPDATE BY ID (ADMIN)
-func (r *pekerjaanRepository) Update(id int, req models.UpdatePekerjaanRequest) (*models.Pekerjaan, error) {
-	result, err := r.db.Exec(`
-		UPDATE pekerjaan_alumni SET nama_perusahaan=$1, posisi_jabatan=$2, bidang_industri=$3, lokasi_kerja=$4,
-		gaji_range=$5, tanggal_mulai_kerja=$6, tanggal_selesai_kerja=$7, status_pekerjaan=$8, deskripsi_pekerjaan=$9, updated_at=$10 
-		WHERE id=$11
-	`, req.NamaPerusahaan, req.PosisiJabatan, req.BidangIndustri, req.LokasiKerja, req.GajiRange,
-		req.TanggalMulaiKerja, req.TanggalSelesaiKerja, req.StatusPekerjaan, req.DeskripsiPekerjaan, time.Now(), id)
-
+// ========================== GET ALL ==========================
+func (r *pekerjaanRepository) GetAll(ctx context.Context) ([]models.Pekerjaan, error) {
+	cursor, err := r.collection.Find(ctx, bson.M{})
 	if err != nil {
 		return nil, err
 	}
+	defer cursor.Close(ctx)
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return nil, sql.ErrNoRows
-	}
-
-	var updated models.Pekerjaan
-	row := r.db.QueryRow(`
-		SELECT id, alumni_id, nama_perusahaan, posisi_jabatan, bidang_industri, lokasi_kerja,
-		gaji_range, tanggal_mulai_kerja, tanggal_selesai_kerja, status_pekerjaan, deskripsi_pekerjaan, created_at, updated_at
-		FROM pekerjaan_alumni 
-		WHERE id=$1
-	`, id)
-
-	err = row.Scan(
-		&updated.ID, &updated.AlumniID, &updated.NamaPerusahaan, &updated.PosisiJabatan, &updated.BidangIndustri,
-		&updated.LokasiKerja, &updated.GajiRange, &updated.TanggalMulaiKerja, &updated.TanggalSelesaiKerja,
-		&updated.StatusPekerjaan, &updated.DeskripsiPekerjaan, &updated.CreatedAt, &updated.UpdatedAt,
-	)
-	if err != nil {
+	var results []models.Pekerjaan
+	if err := cursor.All(ctx, &results); err != nil {
 		return nil, err
 	}
-	return &updated, nil
-}
-
-// SOFT DELETE BY ID (ADMIN)
-func (r *pekerjaanRepository) SoftDeleteByID(id int) error {
-	result, err := r.db.Exec(`
-        UPDATE pekerjaan_alumni 
-        SET is_deleted = TRUE, updated_at = NOW() 
-        WHERE id=$1 AND is_deleted=FALSE
-    `, id)
-	if err != nil {
-		return err
-	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-// SOFT DELETE BY OWNER
-func (r *pekerjaanRepository) SoftDeleteByOwner(id, alumniID int) error {
-	result, err := r.db.Exec(`
-        UPDATE pekerjaan_alumni 
-        SET is_deleted = TRUE, updated_at = NOW() 
-        WHERE id=$1 AND alumni_id=$2 AND is_deleted=FALSE
-    `, id, alumniID)
-	if err != nil {
-		return err
-	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-func (r *pekerjaanRepository) GetAlumniIDByPekerjaan(id int) (int, error) {
-	var alumniID int
-	err := r.db.QueryRow("SELECT alumni_id FROM pekerjaan_alumni WHERE id=$1", id).Scan(&alumniID)
-	return alumniID, err
-}
-
-// GET USER BY ID
-func (r *pekerjaanRepository) GetUserByID(id int) (*models.User, error) {
-	var user models.User
-	err := r.db.QueryRow(`
-        SELECT id, username, email, role, alumni_id, created_at
-        FROM users
-        WHERE id = $1
-    `, id).Scan(
-		&user.ID,
-		&user.Username,
-		&user.Email,
-		&user.Role,
-		&user.AlumniID,
-		&user.CreatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &user, nil
-}
-
-// RESTORE
-func (r *pekerjaanRepository) RestoreByID(id int) error {
-	result, err := r.db.Exec(`
-        UPDATE pekerjaan_alumni 
-        SET is_deleted = FALSE, updated_at = NOW()
-        WHERE id = $1 AND is_deleted = TRUE
-    `, id)
-	if err != nil {
-		return err
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-func (r *pekerjaanRepository) RestoreByOwner(id, alumniID int) error {
-	result, err := r.db.Exec(`
-        UPDATE pekerjaan_alumni 
-        SET is_deleted = FALSE, updated_at = NOW()
-        WHERE id = $1 AND alumni_id = $2 AND is_deleted = TRUE
-    `, id, alumniID)
-	if err != nil {
-		return err
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-// BEKERJA LEBIH 1 TAHUN
-func (r *pekerjaanRepository) GetBekerjalebih1Tahun() ([]models.AlumniWithPekerjaan, error) {
-	rows, err := r.db.Query(`
-        SELECT a.id, a.nama, a.jurusan, a.angkatan,
-               p.nama_perusahaan, p.posisi_jabatan, p.bidang_industri,
-               p.tanggal_mulai_kerja, p.tanggal_selesai_kerja, p.gaji_range
-        FROM alumni a
-        JOIN pekerjaan_alumni p ON a.id = p.alumni_id
-        WHERE (COALESCE(p.tanggal_selesai_kerja, NOW()) - p.tanggal_mulai_kerja) >= INTERVAL '1 year'
-          AND p.is_deleted = FALSE
-        ORDER BY a.id
-    `)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []models.AlumniWithPekerjaan
-	for rows.Next() {
-		var row models.AlumniWithPekerjaan
-		var jurusan sql.NullString
-		var angkatan sql.NullInt64
-		var selesai sql.NullTime
-
-		if err := rows.Scan(
-			&row.AlumniID, &row.Nama, &jurusan, &angkatan,
-			&row.NamaPerusahaan, &row.PosisiJabatan, &row.BidangIndustri,
-			&row.TanggalMulaiKerja, &selesai, &row.GajiRange,
-		); err != nil {
-			return nil, err
-		}
-
-		if jurusan.Valid {
-			row.Jurusan = jurusan.String
-		}
-		if angkatan.Valid {
-			row.Angkatan = int(angkatan.Int64)
-		}
-		if selesai.Valid {
-			row.TanggalSelesaiKerja = &selesai.Time
-		} else {
-			row.TanggalSelesaiKerja = nil
-		}
-
-		results = append(results, row)
-	}
-
 	return results, nil
 }
 
-// PAGINATION, SEARCH, SORTING
-func (r *pekerjaanRepository) GetPekerjaanRepo(search, sortBy, order string, limit, offset int) ([]models.Pekerjaan, error) {
-	query := fmt.Sprintf(`
-		SELECT id, alumni_id, nama_perusahaan, posisi_jabatan, bidang_industri, lokasi_kerja, gaji_range, tanggal_mulai_kerja, status_pekerjaan, deskripsi_pekerjaan, created_at, updated_at
-		FROM pekerjaan_alumni
-		WHERE is_deleted = FALSE AND (
-			nama_perusahaan ILIKE $1 
-			OR posisi_jabatan ILIKE $1 
-			OR bidang_industri ILIKE $1 
-			OR lokasi_kerja ILIKE $1
-		)
-		ORDER BY %s %s
-		LIMIT $2 OFFSET $3
-	`, sortBy, order)
+// ========================== GET BY ID ==========================
+func (r *pekerjaanRepository) GetByID(ctx context.Context, id string) (*models.Pekerjaan, error) {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return nil, err
+	}
 
-	rows, err := r.db.Query(query, "%"+search+"%", limit, offset)
+	var pekerjaan models.Pekerjaan
+	err = r.collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&pekerjaan)
+	if err == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	return &pekerjaan, err
+}
+
+// ========================== GET BY ALUMNI ==========================
+func (r *pekerjaanRepository) GetByAlumniID(ctx context.Context, alumniID string) ([]models.Pekerjaan, error) {
+	alumniObjID, err := primitive.ObjectIDFromHex(alumniID)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, err := r.collection.Find(ctx, bson.M{"alumni_id": alumniObjID})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var list []models.Pekerjaan
+	if err = cursor.All(ctx, &list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+// ========================== UPDATE ==========================
+func (r *pekerjaanRepository) Update(ctx context.Context, id string, req *models.UpdatePekerjaanRequest) (*models.Pekerjaan, error) {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return nil, err
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"nama_perusahaan":       req.NamaPerusahaan,
+			"posisi_jabatan":        req.PosisiJabatan,
+			"bidang_industri":       req.BidangIndustri,
+			"lokasi_kerja":          req.LokasiKerja,
+			"gaji_range":            req.GajiRange,
+			"tanggal_mulai_kerja":   req.TanggalMulaiKerja,
+			"tanggal_selesai_kerja": req.TanggalSelesaiKerja,
+			"status_pekerjaan":      req.StatusPekerjaan,
+			"deskripsi_pekerjaan":   req.DeskripsiPekerjaan,
+			"updated_at":            time.Now(),
+		},
+	}
+	_, err = r.collection.UpdateOne(ctx, bson.M{"_id": objID}, update)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByID(ctx, id)
+}
+
+// ========================== SOFT DELETE ==========================
+func (r *pekerjaanRepository) SoftDeleteByID(ctx context.Context, id string) error {
+	objID, _ := primitive.ObjectIDFromHex(id)
+
+	var pekerjaan models.Pekerjaan
+	if err := r.collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&pekerjaan); err != nil {
+		return fmt.Errorf("data tidak ditemukan")
+	}
+
+	trash := models.Trash{
+		ID:                  pekerjaan.ID,
+		AlumniID:            pekerjaan.AlumniID,
+		NamaPerusahaan:      pekerjaan.NamaPerusahaan,
+		PosisiJabatan:       pekerjaan.PosisiJabatan,
+		BidangIndustri:      pekerjaan.BidangIndustri,
+		LokasiKerja:         pekerjaan.LokasiKerja,
+		GajiRange:           pekerjaan.GajiRange,
+		TanggalMulaiKerja:   pekerjaan.TanggalMulaiKerja,
+		TanggalSelesaiKerja: pekerjaan.TanggalSelesaiKerja,
+		StatusPekerjaan:     pekerjaan.StatusPekerjaan,
+		DeskripsiPekerjaan:  pekerjaan.DeskripsiPekerjaan,
+		IsDeleted:           true,
+		CreatedAt:           pekerjaan.CreatedAt,
+		UpdatedAt:           time.Now(),
+	}
+
+	if _, err := r.trashCollection.InsertOne(ctx, trash); err != nil {
+		return err
+	}
+
+	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": objID})
+	return err
+}
+
+func (r *pekerjaanRepository) SoftDeleteByOwner(ctx context.Context, id, alumniID string) error {
+	objID, _ := primitive.ObjectIDFromHex(id)
+	alumniObj, _ := primitive.ObjectIDFromHex(alumniID)
+
+	var pekerjaan models.Pekerjaan
+	if err := r.collection.FindOne(ctx, bson.M{"_id": objID, "alumni_id": alumniObj}).Decode(&pekerjaan); err != nil {
+		return fmt.Errorf("data tidak ditemukan atau bukan milik user ini")
+	}
+
+	trash := models.Trash{
+		ID:                  pekerjaan.ID,
+		AlumniID:            pekerjaan.AlumniID,
+		NamaPerusahaan:      pekerjaan.NamaPerusahaan,
+		PosisiJabatan:       pekerjaan.PosisiJabatan,
+		BidangIndustri:      pekerjaan.BidangIndustri,
+		LokasiKerja:         pekerjaan.LokasiKerja,
+		GajiRange:           pekerjaan.GajiRange,
+		TanggalMulaiKerja:   pekerjaan.TanggalMulaiKerja,
+		TanggalSelesaiKerja: pekerjaan.TanggalSelesaiKerja,
+		StatusPekerjaan:     pekerjaan.StatusPekerjaan,
+		DeskripsiPekerjaan:  pekerjaan.DeskripsiPekerjaan,
+		IsDeleted:           true,
+		CreatedAt:           pekerjaan.CreatedAt,
+		UpdatedAt:           time.Now(),
+	}
+
+	if _, err := r.trashCollection.InsertOne(ctx, trash); err != nil {
+		return err
+	}
+
+	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": objID, "alumni_id": alumniObj})
+	return err
+}
+
+// ========================== RESTORE ==========================
+func (r *pekerjaanRepository) Restore(ctx context.Context, id string, alumniID *string, role string) error {
+	objID, _ := primitive.ObjectIDFromHex(id)
+
+	filter := bson.M{"_id": objID}
+
+	// Alumni hanya boleh restore miliknya sendiri
+	if role != "admin" && alumniID != nil {
+		alumniObj, _ := primitive.ObjectIDFromHex(*alumniID)
+		filter["alumni_id"] = alumniObj
+	}
+
+	var trash models.Trash
+	if err := r.trashCollection.FindOne(ctx, filter).Decode(&trash); err != nil {
+		return fmt.Errorf("data tidak ditemukan di trash atau kamu tidak punya akses")
+	}
+
+	pekerjaan := models.Pekerjaan{
+		ID:                  trash.ID,
+		AlumniID:            trash.AlumniID,
+		NamaPerusahaan:      trash.NamaPerusahaan,
+		PosisiJabatan:       trash.PosisiJabatan,
+		BidangIndustri:      trash.BidangIndustri,
+		LokasiKerja:         trash.LokasiKerja,
+		GajiRange:           trash.GajiRange,
+		TanggalMulaiKerja:   trash.TanggalMulaiKerja,
+		TanggalSelesaiKerja: trash.TanggalSelesaiKerja,
+		StatusPekerjaan:     trash.StatusPekerjaan,
+		DeskripsiPekerjaan:  trash.DeskripsiPekerjaan,
+		CreatedAt:           trash.CreatedAt,
+		UpdatedAt:           time.Now(),
+	}
+
+	if _, err := r.collection.InsertOne(ctx, pekerjaan); err != nil {
+		return err
+	}
+
+	_, err := r.trashCollection.DeleteOne(ctx, filter)
+	return err
+}
+
+// ========================== GET TRASH ==========================
+func (r *pekerjaanRepository) GetTrash(ctx context.Context) ([]models.Trash, error) {
+	cursor, err := r.trashCollection.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var list []models.Trash
+	if err = cursor.All(ctx, &list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+func (r *pekerjaanRepository) GetTrashByOwner(ctx context.Context, alumniID string) ([]models.Trash, error) {
+	alumniObj, err := primitive.ObjectIDFromHex(alumniID)
+	if err != nil {
+		return nil, fmt.Errorf("alumni_id tidak valid")
+	}
+
+	cursor, err := r.trashCollection.Find(ctx, bson.M{"alumni_id": alumniObj})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var list []models.Trash
+	if err = cursor.All(ctx, &list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+// ========================== DELETE (HARD) ==========================
+func (r *pekerjaanRepository) Delete(ctx context.Context, id string, alumniID *string) error {
+	objID, _ := primitive.ObjectIDFromHex(id)
+	filter := bson.M{"_id": objID}
+	if alumniID != nil {
+		alumniObj, _ := primitive.ObjectIDFromHex(*alumniID)
+		filter["alumni_id"] = alumniObj
+	}
+	_, err := r.trashCollection.DeleteOne(ctx, filter)
+	return err
+}
+
+// ========================== SEARCH, SORT, PAGINATION ==========================
+func (r *pekerjaanRepository) GetPekerjaanRepo(ctx context.Context, search, sortBy, order string, limit, offset int64) ([]models.Pekerjaan, error) {
+	filter := bson.M{
+		"$or": []bson.M{
+			{"nama_perusahaan": bson.M{"$regex": search, "$options": "i"}},
+			{"posisi_jabatan": bson.M{"$regex": search, "$options": "i"}},
+			{"bidang_industri": bson.M{"$regex": search, "$options": "i"}},
+			{"lokasi_kerja": bson.M{"$regex": search, "$options": "i"}},
+		},
+	}
+
+	sortOrder := 1
+	if order == "desc" {
+		sortOrder = -1
+	}
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: sortBy, Value: sortOrder}}).
+		SetLimit(limit).
+		SetSkip(offset)
+
+	cursor, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {
 		log.Println("Query error:", err)
 		return nil, err
 	}
-	defer rows.Close()
+	defer cursor.Close(ctx)
 
 	var pekerjaan []models.Pekerjaan
-	for rows.Next() {
-		var p models.Pekerjaan
-		if err := rows.Scan(
-			&p.ID, &p.AlumniID, &p.NamaPerusahaan, &p.PosisiJabatan,
-			&p.BidangIndustri, &p.LokasiKerja, &p.GajiRange,
-			&p.TanggalMulaiKerja, &p.StatusPekerjaan, &p.DeskripsiPekerjaan, &p.CreatedAt, &p.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		pekerjaan = append(pekerjaan, p)
+	if err = cursor.All(ctx, &pekerjaan); err != nil {
+		return nil, err
 	}
 	return pekerjaan, nil
 }
 
-// COUNT FOR PAGINATION
-func (r *pekerjaanRepository) CountPekerjaanRepo(search string) (int, error) {
-	var total int
-	countQuery := `SELECT COUNT(*) FROM pekerjaan_alumni 
-		WHERE is_deleted = FALSE AND (
-			nama_perusahaan ILIKE $1 
-			OR posisi_jabatan ILIKE $1 
-			OR bidang_industri ILIKE $1 
-			OR lokasi_kerja ILIKE $1
-		)`
-	err := r.db.QueryRow(countQuery, "%"+search+"%").Scan(&total)
-
-	if err != nil && err != sql.ErrNoRows {
-		return 0, err
+func (r *pekerjaanRepository) CountPekerjaanRepo(ctx context.Context, search string) (int64, error) {
+	filter := bson.M{
+		"$or": []bson.M{
+			{"nama_perusahaan": bson.M{"$regex": search, "$options": "i"}},
+			{"posisi_jabatan": bson.M{"$regex": search, "$options": "i"}},
+			{"bidang_industri": bson.M{"$regex": search, "$options": "i"}},
+			{"lokasi_kerja": bson.M{"$regex": search, "$options": "i"}},
+		},
 	}
-	return total, nil
+	count, err := r.collection.CountDocuments(ctx, filter)
+	return count, err
 }
-
-// GET TRASH admin bisa lihat semua data di trash, alumni hanya bisa lihat miliknya
-func (r *pekerjaanRepository) GetTrash() ([]models.Pekerjaan, error) {
-	rows, err := r.db.Query(`
-		SELECT id, alumni_id, nama_perusahaan, posisi_jabatan, bidang_industri, lokasi_kerja, gaji_range, 
-		       tanggal_mulai_kerja, tanggal_selesai_kerja, status_pekerjaan, deskripsi_pekerjaan, is_deleted, created_at, updated_at
-		FROM pekerjaan_alumni 
-		WHERE is_deleted = TRUE
-		ORDER BY updated_at DESC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var list []models.Pekerjaan
-	for rows.Next() {
-		var p models.Pekerjaan
-		err := rows.Scan(
-			&p.ID, &p.AlumniID, &p.NamaPerusahaan, &p.PosisiJabatan, &p.BidangIndustri,
-			&p.LokasiKerja, &p.GajiRange, &p.TanggalMulaiKerja, &p.TanggalSelesaiKerja,
-			&p.StatusPekerjaan, &p.DeskripsiPekerjaan, &p.IsDeleted, &p.CreatedAt, &p.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		list = append(list, p)
-	}
-	return list, nil
-}
-
-func (r *pekerjaanRepository) GetTrashByOwner(alumniID int) ([]models.Pekerjaan, error) {
-	rows, err := r.db.Query(`
-		SELECT id, alumni_id, nama_perusahaan, posisi_jabatan, bidang_industri, lokasi_kerja, gaji_range,
-		       tanggal_mulai_kerja, tanggal_selesai_kerja, status_pekerjaan, deskripsi_pekerjaan, is_deleted, created_at, updated_at
-		FROM pekerjaan_alumni 
-		WHERE is_deleted = TRUE AND alumni_id = $1
-		ORDER BY updated_at DESC
-	`, alumniID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var list []models.Pekerjaan
-	for rows.Next() {
-		var p models.Pekerjaan
-		err := rows.Scan(
-			&p.ID, &p.AlumniID, &p.NamaPerusahaan, &p.PosisiJabatan, &p.BidangIndustri,
-			&p.LokasiKerja, &p.GajiRange, &p.TanggalMulaiKerja, &p.TanggalSelesaiKerja,
-			&p.StatusPekerjaan, &p.DeskripsiPekerjaan, &p.IsDeleted, &p.CreatedAt, &p.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		list = append(list, p)
-	}
-	return list, nil
-}
-
-// HARD DELETE DATA
-// Admin bisa hard delete semua data, user hanya bisa hard delete datanya sendiri
-func (r *pekerjaanRepository) Delete(id int, alumniID *int) error {
-	query := `
-		DELETE FROM pekerjaan_alumni
-		WHERE id = $1
-	`
-
-	var result sql.Result
-	var err error
-
-	// Jika alumniID tidak nil → user biasa, hanya boleh hapus datanya sendiri
-	if alumniID != nil {
-		query += " AND alumni_id = $2"
-		result, err = r.db.Exec(query, id, *alumniID)
-	} else {
-		// Jika nil → berarti admin, bisa hapus data siapapun
-		result, err = r.db.Exec(query, id)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
-}
-
-
-// RESTORE DATA YANG DI SOFT DELETE
-// Admin bisa restore semua data, user hanya bisa restore data miliknya
-func (r *pekerjaanRepository) Restore(id int, alumniID *int) error {
-	query := `
-		UPDATE pekerjaan_alumni
-		SET is_deleted = FALSE, updated_at = NOW()
-		WHERE id = $1
-	`
-
-	// Jika alumniID tidak nil → berarti user biasa (restore hanya miliknya)
-	// Jika alumniID nil → berarti admin (restore semua bisa)
-	var result sql.Result
-	var err error
-
-	if alumniID != nil {
-		query += " AND alumni_id = $2"
-		result, err = r.db.Exec(query, id, *alumniID)
-	} else {
-		result, err = r.db.Exec(query, id)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
-}
-
-			

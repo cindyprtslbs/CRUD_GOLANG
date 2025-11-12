@@ -1,14 +1,15 @@
 package service
 
 import (
+	"context"
+	"errors"
+	"log"
+
 	models "crud-app/app/model"
 	"crud-app/app/repository"
-	"database/sql"
-	"log"
-	"strconv"
-	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type PekerjaanService struct {
@@ -19,98 +20,139 @@ func NewPekerjaanService(r repository.PekerjaanRepository) *PekerjaanService {
 	return &PekerjaanService{repo: r}
 }
 
-// =================== GET ===================
+// @Summary Get all pekerjaan
+// @Description Get daftar semua data pekerjaan alumni
+// @Produce json
+// @Success 200 {object} fiber.Map
+// @Failure 404 {object} fiber.Map
+// @Failure 500 {object} fiber.Map
+// @Router /unair/pekerjaan-alumni [get]
 func (s *PekerjaanService) GetAll(c *fiber.Ctx) error {
+	ctx := context.Background()
 	username := c.Locals("username").(string)
 	log.Printf("User %s mengakses GET /api/pekerjaan", username)
 
-	list, err := s.repo.GetAll()
+	data, err := s.repo.GetAll(ctx)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal mengambil data pekerjaan"})
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.JSON(fiber.Map{
-		"success": true,
-		"data":    list,
-	})
+	if len(data) == 0 {
+		return c.Status(404).JSON(fiber.Map{"error": "Data pekerjaan tidak ditemukan"})
+	}
+	return c.JSON(fiber.Map{"success": true, "data": data})
 }
 
+// @Summary Get pekerjaan by ID
+// @Description Get detail data pekerjaan berdasarkan ID
+// @Produce json
+// @Param id path string true "Pekerjaan ID"
+// @Success 200 {object} fiber.Map
+// @Failure 404 {object} fiber.Map
+// @Failure 500 {object} fiber.Map
+// @Security Bearer
+// @Router /unair/pekerjaan-alumni/{id} [get]
 func (s *PekerjaanService) GetByID(c *fiber.Ctx) error {
-	username := c.Locals("username").(string)
-	id, err := strconv.Atoi(c.Params("id"))
+	ctx := context.Background()
+	id := c.Params("id")
+
+	data, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "ID tidak valid"})
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return c.Status(404).JSON(fiber.Map{"error": "Pekerjaan tidak ditemukan"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	log.Printf("User %s mengakses GET /api/pekerjaan/%d", username, id)
-
-	p, err := s.repo.GetByID(id)
-	if err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "Pekerjaan tidak ditemukan"})
-	}
-	return c.JSON(fiber.Map{
-		"success": true,
-		"data":    p,
-	})
+	return c.JSON(fiber.Map{"success": true, "data": data})
 }
 
+// @Summary Get pekerjaan by alumni ID
+// @Description Get data pekerjaan berdasarkan alumni ID (admin only)
+// @Produce json
+// @Param alumni_id path string true "Alumni ID"
+// @Success 200 {object} fiber.Map
+// @Failure 404 {object} fiber.Map
+// @Failure 500 {object} fiber.Map
+// @Security Bearer
+// @Router /unair/pekerjaan-alumni/alumni/{alumni_id} [get]
 func (s *PekerjaanService) GetByAlumniID(c *fiber.Ctx) error {
-	username := c.Locals("username").(string)
+	ctx := context.Background()
+	alumniID := c.Params("alumni_id")
 
-	alumniID, err := strconv.Atoi(c.Params("alumni_id"))
+	data, err := s.repo.GetByAlumniID(ctx, alumniID)
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "ID Alumni tidak valid"})
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
-
-	log.Printf("User %s mengakses GET /api/pekerjaan/alumni/%d", username, alumniID)
-
-	list, err := s.repo.GetByAlumniID(alumniID)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal mengambil data pekerjaan alumni"})
+	if len(data) == 0 {
+		return c.Status(404).JSON(fiber.Map{"error": "Data pekerjaan alumni tidak ditemukan"})
 	}
-	return c.JSON(fiber.Map{
-		"success": true,
-		"data":    list,
-	})
+	return c.JSON(fiber.Map{"success": true, "data": data})
 }
 
-// =================== CREATE ===================
+// @Summary Create new pekerjaan
+// @Description Tambah data pekerjaan alumni baru (admin only)
+// @Accept json
+// @Produce json
+// @Param pekerjaanRequest body models.CreatePekerjaanRequest true "Create Pekerjaan Request"
+// @Success 201 {object} fiber.Map
+// @Failure 400 {object} fiber.Map
+// @Failure 500 {object} fiber.Map
+// @Security Bearer
+// @Router /unair/pekerjaan-alumni [post]
 func (s *PekerjaanService) Create(c *fiber.Ctx) error {
+	ctx := context.Background()
 	username := c.Locals("username").(string)
-	log.Printf("Admin %s menambah pekerjaan_alumni baru", username)
+	log.Printf("Admin %s menambahkan data pekerjaan_alumni baru", username)
 
+	// Gunakan struct CreatePekerjaanRequest (bukan Pekerjaan langsung)
 	var req models.CreatePekerjaanRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Body request tidak valid"})
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Body request tidak valid",
+			"hint":  "Pastikan format JSON sesuai dan semua field string",
+		})
 	}
 
-	// Validasi input
-	if req.AlumniID == 0 || req.NamaPerusahaan == "" || req.PosisiJabatan == "" ||
+	// Validasi field wajib
+	if req.AlumniID == "" || req.NamaPerusahaan == "" || req.PosisiJabatan == "" ||
 		req.BidangIndustri == "" || req.LokasiKerja == "" || req.GajiRange == "" ||
 		req.TanggalMulaiKerja == "" || req.StatusPekerjaan == "" || req.DeskripsiPekerjaan == "" {
-		return c.Status(400).JSON(fiber.Map{"error": "Semua field wajib diisi"})
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Semua field wajib diisi dan tidak boleh kosong",
+		})
 	}
 
-	newPekerjaan, err := s.repo.Create(req)
+	// Panggil repository untuk simpan ke MongoDB
+	newPekerjaan, err := s.repo.Create(ctx, &req)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal menambah pekerjaan"})
+		return c.Status(500).JSON(fiber.Map{
+			"error":   "Gagal menyimpan data pekerjaan",
+			"details": err.Error(),
+		})
 	}
 
 	return c.Status(201).JSON(fiber.Map{
 		"success": true,
+		"message": "Data pekerjaan alumni berhasil ditambahkan",
 		"data":    newPekerjaan,
 	})
 }
 
-// =================== UPDATE ===================
+// @Summary Update pekerjaan
+// @Description Update data pekerjaan (admin only)
+// @Accept json
+// @Produce json
+// @Param id path string true "Pekerjaan ID"
+// @Param pekerjaanRequest body models.UpdatePekerjaanRequest true "Update Pekerjaan Request"
+// @Success 200 {object} fiber.Map
+// @Failure 400 {object} fiber.Map
+// @Failure 404 {object} fiber.Map
+// @Failure 500 {object} fiber.Map
+// @Security Bearer
+// @Router /unair/pekerjaan-alumni/{id} [put]
 func (s *PekerjaanService) Update(c *fiber.Ctx) error {
-	username := c.Locals("username").(string)
-
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
-
-	log.Printf("Admin %s mengupdate pekerjaan_alumni ID %d", username, id)
+	ctx := context.Background()
+	id := c.Params("id")
 
 	var req models.UpdatePekerjaanRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -119,321 +161,186 @@ func (s *PekerjaanService) Update(c *fiber.Ctx) error {
 
 	if req.NamaPerusahaan == "" || req.PosisiJabatan == "" ||
 		req.BidangIndustri == "" || req.LokasiKerja == "" || req.GajiRange == "" ||
-		req.TanggalMulaiKerja == "" || req.StatusPekerjaan == "" || req.DeskripsiPekerjaan == "" {
+		req.StatusPekerjaan == "" || req.DeskripsiPekerjaan == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "Semua field wajib diisi"})
 	}
 
-	updated, err := s.repo.Update(id, req)
+	updated, err := s.repo.Update(ctx, id, &req)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return c.Status(404).JSON(fiber.Map{"error": "Pekerjaan tidak ditemukan"})
 		}
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal update pekerjaan"})
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.JSON(fiber.Map{
-		"success": true,
-		"data":    updated,
-	})
+
+	return c.JSON(fiber.Map{"success": true, "data": updated})
 }
 
-// =================== DELETE ===================
-
+// @Summary Soft delete pekerjaan
+// @Description Hapus data pekerjaan (soft delete)
+// @Produce json
+// @Param id path string true "Pekerjaan ID"
+// @Success 200 {object} fiber.Map
+// @Failure 403 {object} fiber.Map
+// @Failure 500 {object} fiber.Map
+// @Security Bearer
+// @Router /unair/pekerjaan-alumni/{id} [delete]
 func (s *PekerjaanService) SoftDelete(c *fiber.Ctx) error {
-	role := c.Locals("role")
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
+	ctx := context.Background()
+	id := c.Params("id")
+	role := c.Locals("role").(string)
+	alumniID, _ := c.Locals("alumni_id").(string)
 
-	roleStr, ok := role.(string)
-	if !ok {
-		return c.Status(403).JSON(fiber.Map{"error": "Role tidak dikenali"})
-	}
-
-	// admin bisa hapus semua data
-	if roleStr == "admin" {
-		if err := s.repo.SoftDeleteByID(id); err != nil {
-			if err == sql.ErrNoRows {
-				return c.Status(404).JSON(fiber.Map{"error": "Pekerjaan tidak ditemukan"})
-			}
-			return c.Status(500).JSON(fiber.Map{"error": "Gagal soft delete pekerjaan"})
+	if role == "admin" {
+		if err := s.repo.SoftDeleteByID(ctx, id); err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
-		return c.JSON(fiber.Map{"success": true, "message": "Pekerjaan berhasil dihapus oleh admin"})
+		return c.JSON(fiber.Map{"success": true, "message": "Data pekerjaan berhasil dihapus oleh admin"})
 	}
 
-	// user biasa (alumni)
-	userID := c.Locals("user_id")
-	var uid int
-	switch v := userID.(type) {
-	case int:
-		uid = v
-	case float64:
-		uid = int(v)
-	default:
-		return c.Status(403).JSON(fiber.Map{"error": "User tidak valid"})
+	// User hanya boleh hapus miliknya sendiri
+	data, _ := s.repo.GetByID(ctx, id)
+	if data == nil || data.AlumniID.Hex() != alumniID {
+		return c.Status(403).JSON(fiber.Map{
+			"error": "Kamu tidak bisa menghapus data milik orang lain",
+		})
 	}
 
-	// Ambil user dari DB
-	user, err := s.repo.GetUserByID(uid)
-	if err != nil || user.AlumniID == nil {
-		return c.Status(403).JSON(fiber.Map{"error": "User tidak terkait alumni"})
+	if err := s.repo.SoftDeleteByOwner(ctx, id, alumniID); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Pastikan role benar-benar alumni
-	if user.Role != "alumni" {
-		return c.Status(403).JSON(fiber.Map{"error": "Hanya alumni yang boleh hapus pekerjaan miliknya"})
-	}
-
-	// Ambil data pekerjaan dulu
-	pekerjaan, err := s.repo.GetByID(id)
-	if err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "Pekerjaan tidak ditemukan"})
-	}
-
-	// Validasi kepemilikan
-	if pekerjaan.AlumniID != *user.AlumniID {
-		return c.Status(403).JSON(fiber.Map{"error": "Kamu tidak boleh menghapus pekerjaan milik orang lain"})
-	}
-
-	// Kalau lolos semua → hapus
-	if err := s.repo.SoftDeleteByID(id); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal soft delete pekerjaan"})
-	}
-
-	return c.JSON(fiber.Map{"success": true, "message": "Pekerjaanmu berhasil dihapus"})
-
-}
-
-// =================== LAPORAN ===================
-func (s *PekerjaanService) GetBekerjalebih1Tahun(c *fiber.Ctx) error {
-	username := c.Locals("username").(string)
-	log.Printf("User %s mengakses GET /api/pekerjaan/bekerja-lebih-setahun", username)
-
-	list, err := s.repo.GetBekerjalebih1Tahun()
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal mengambil data"})
-	}
 	return c.JSON(fiber.Map{
 		"success": true,
-		"count":   len(list),
-		"data":    list,
+		"message": "Pekerjaanmu berhasil dihapus",
 	})
 }
 
-// =================== PAGINATION ===================
+// @Summary Restore deleted pekerjaan
+// @Description Restore data pekerjaan yang telah dihapus
+// @Produce json
+// @Param id path string true "Pekerjaan ID"
+// @Success 200 {object} fiber.Map
+// @Failure 403 {object} fiber.Map
+// @Failure 500 {object} fiber.Map
+// @Security Bearer
+// @Router /unair/pekerjaan-alumni/{id} [patch]
+func (s *PekerjaanService) Restore(c *fiber.Ctx) error {
+	ctx := context.Background()
+	id := c.Params("id")
+	role := c.Locals("role").(string)
+	alumniID, _ := c.Locals("alumni_id").(string)
+
+	var alumniPtr *string
+	if alumniID != "" {
+		alumniPtr = &alumniID
+	}
+
+	if err := s.repo.Restore(ctx, id, alumniPtr, role); err != nil {
+		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"success": true, "message": "Data berhasil direstore"})
+}
+
+// @Summary Get deleted pekerjaan (trash)
+// @Description Get data pekerjaan yang telah dihapus (soft delete)
+// @Produce json
+// @Success 200 {object} fiber.Map
+// @Failure 500 {object} fiber.Map
+// @Security Bearer
+// @Router /unair/pekerjaan-alumni/trash [get]
+func (s *PekerjaanService) GetTrash(c *fiber.Ctx) error {
+	ctx := context.Background()
+	role := c.Locals("role").(string)
+
+	if role == "admin" {
+		data, err := s.repo.GetTrash(ctx)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(fiber.Map{"success": true, "data": data})
+	}
+
+	alumniID := c.Locals("alumni_id").(string)
+	data, err := s.repo.GetTrashByOwner(ctx, alumniID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"success": true, "data": data})
+}
+
+// @Summary Hard delete pekerjaan permanently
+// @Description Hapus permanen data pekerjaan dari database
+// @Produce json
+// @Param id path string true "Pekerjaan ID"
+// @Success 200 {object} fiber.Map
+// @Failure 500 {object} fiber.Map
+// @Security Bearer
+// @Router /unair/pekerjaan-alumni/trash/delete/{id} [delete]
+func (s *PekerjaanService) Delete(c *fiber.Ctx) error {
+	ctx := context.Background()
+	id := c.Params("id")
+	role := c.Locals("role").(string)
+
+	if role == "admin" {
+		if err := s.repo.Delete(ctx, id, nil); err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(fiber.Map{"success": true, "message": "Pekerjaan berhasil dihapus permanen oleh admin"})
+	}
+
+	alumniID := c.Locals("alumni_id").(string)
+	if err := s.repo.Delete(ctx, id, &alumniID); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"success": true, "message": "Pekerjaanmu berhasil dihapus permanen"})
+}
+
+// @Summary Get pekerjaan with pagination
+// @Description Get data pekerjaan dengan fitur pagination, search, dan sort
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Items per page" default(10)
+// @Param search query string false "Search keyword"
+// @Param sortBy query string false "Sort by field" default(created_at)
+// @Param order query string false "Sort order" default(asc)
+// @Success 200 {object} models.PekerjaanResponse
+// @Failure 500 {object} fiber.Map
+// @Router /unair/pekerjaan-alumni [get]
 func (s *PekerjaanService) GetPekerjaanService(c *fiber.Ctx) error {
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "10"))
-	sortBy := c.Query("sortBy", "id")
+	ctx := context.Background()
+
+	page := c.QueryInt("page", 1)
+	limit := c.QueryInt("limit", 10)
+	sortBy := c.Query("sortBy", "created_at")
 	order := c.Query("order", "asc")
 	search := c.Query("search", "")
 
-	offset := (page - 1) * limit
+	offset := int64((page - 1) * limit)
 
-	sortByWhitelist := map[string]bool{
-		"id": true, "nama_perusahaan": true, "posisi_jabatan": true,
-		"bidang_industri": true, "lokasi_kerja": true, "created_at": true,
-	}
-	if !sortByWhitelist[sortBy] {
-		sortBy = "id"
-	}
-	if strings.ToLower(order) != "desc" {
-		order = "asc"
-	}
-
-	pekerjaan, err := s.repo.GetPekerjaanRepo(search, sortBy, order, limit, offset)
+	data, err := s.repo.GetPekerjaanRepo(ctx, search, sortBy, order, int64(limit), offset)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch pekerjaan"})
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	total, err := s.repo.CountPekerjaanRepo(search)
+	total, err := s.repo.CountPekerjaanRepo(ctx, search)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Failed to count pekerjaan"})
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	response := models.PekerjaanResponse{
-		Data: pekerjaan,
+		Data: data,
 		Meta: models.MetaInfo{
 			Page:   page,
 			Limit:  limit,
-			Total:  total,
-			Pages:  (total + limit - 1) / limit,
+			Total:  int(total),
+			Pages:  int((total + int64(limit) - 1) / int64(limit)),
 			SortBy: sortBy,
 			Order:  order,
 			Search: search,
 		},
 	}
-
 	return c.JSON(response)
-}
-
-// =================== RESTORE ===================
-func (s *PekerjaanService) Restore(c *fiber.Ctx) error {
-	role := c.Locals("role")
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
-	roleStr, ok := role.(string)
-	if !ok {
-		return c.Status(403).JSON(fiber.Map{"error": "Role tidak dikenali"})
-	}
-
-	// admin bisa restore semua data
-	if roleStr == "admin" {
-		if err := s.repo.RestoreByID(id); err != nil {
-			if err == sql.ErrNoRows {
-				return c.Status(404).JSON(fiber.Map{"error": "Pekerjaan tidak ditemukan"})
-			}
-			return c.Status(500).JSON(fiber.Map{"error": "Gagal restore pekerjaan"})
-		}
-		return c.JSON(fiber.Map{"success": true, "message": "Pekerjaan berhasil direstore oleh admin"})
-	}
-
-	// user biasa (alumni)
-	userID := c.Locals("user_id")
-	var uid int
-	switch v := userID.(type) {
-	case int:
-		uid = v
-	case float64:
-		uid = int(v)
-	default:
-		return c.Status(403).JSON(fiber.Map{"error": "User tidak valid"})
-	}
-
-	// Ambil user dari DB
-	user, err := s.repo.GetUserByID(uid)
-	if err != nil || user.AlumniID == nil {
-		return c.Status(403).JSON(fiber.Map{"error": "User tidak terkait alumni"})
-	}
-	// Pastikan role benar-benar alumni
-	if user.Role != "alumni" {
-		return c.Status(403).JSON(fiber.Map{"error": "Hanya alumni yang boleh restore pekerjaan miliknya"})
-	}
-	// Ambil data pekerjaan dulu
-	pekerjaan, err := s.repo.GetByID(id)
-
-	if err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "Pekerjaan tidak ditemukan"})
-	}
-	// Validasi kepemilikan
-	if pekerjaan.AlumniID != *user.AlumniID {
-		return c.Status(403).JSON(fiber.Map{"error": "Kamu tidak boleh merestore pekerjaan milik orang lain"})
-	}
-	// Kalau lolos semua → restore
-	if err := s.repo.RestoreByOwner(id, *user.AlumniID); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal restore pekerjaan"})
-	}
-	return c.JSON(fiber.Map{"success": true, "message": "Pekerjaanmu berhasil direstore"})
-}
-
-// pekerjaanService.GetTrash admin bisa lihat semua data di trash, alumni hanya bisa lihat miliknya
-func (s *PekerjaanService) GetTrash(c *fiber.Ctx) error {
-	role := c.Locals("role")
-	roleStr, ok := role.(string)
-	if !ok {
-		return c.Status(403).JSON(fiber.Map{"error": "Role tidak dikenali"})
-	}
-	// admin bisa lihat semua data di trash
-	if roleStr == "admin" {
-		list, err := s.repo.GetTrash()
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Gagal mengambil data trash"})
-		}
-		return c.JSON(fiber.Map{
-			"success": true,
-			"count":   len(list),
-			"data":    list,
-		})
-	}
-	// user biasa (alumni)
-	userID := c.Locals("user_id")
-	var uid int
-	switch v := userID.(type) {
-	case int:
-		uid = v
-	case float64:
-		uid = int(v)
-	default:
-		return c.Status(403).JSON(fiber.Map{"error": "User tidak valid"})
-	}
-	// Ambil user dari DB
-	user, err := s.repo.GetUserByID(uid)
-	if err != nil || user.AlumniID == nil {
-		return c.Status(403).JSON(fiber.Map{"error": "User tidak terkait alumni"})
-	}
-	// Pastikan role benar-benar alumni
-	if user.Role != "alumni" {
-		return c.Status(403).JSON(fiber.Map{"error": "Hanya alumni yang boleh lihat trash pekerjaan miliknya"})
-	}
-	// Ambil data trash milik alumni
-	list, err := s.repo.GetTrashByOwner(*user.AlumniID)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal mengambil data trash milikmu"})
-	}
-	return c.JSON(fiber.Map{
-		"success": true,
-		"count":   len(list),
-		"data":    list,
-	})
-}
-
-// HARD DELETE
-// ADMIN BISA HARD DELETE SEMUA DATA
-// ALUMNI HANYA BISA HARD DELETE MILIKNYA SENDIRI
-func (s *PekerjaanService) Delete(c *fiber.Ctx) error {
-	role := c.Locals("role")
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
-	roleStr, ok := role.(string)
-	if !ok {
-		return c.Status(403).JSON(fiber.Map{"error": "Role tidak dikenali"})
-	}
-	// admin bisa delete semua data
-	if roleStr == "admin" {
-		if err := s.repo.Delete(id, nil); err != nil {
-			if err == sql.ErrNoRows {
-				return c.Status(404).JSON(fiber.Map{"error": "Pekerjaan tidak ditemukan"})
-			}
-			return c.Status(500).JSON(fiber.Map{"error": "Gagal delete pekerjaan"})
-		}
-		return c.JSON(fiber.Map{"success": true, "message": "Pekerjaan berhasil dihapus oleh admin"})
-	}
-	// user biasa (alumni)
-	userID := c.Locals("user_id")
-	var uid int
-	switch v := userID.(type) {
-	case int:
-		uid = v
-	case float64:
-		uid = int(v)
-	default:
-		return c.Status(403).JSON(fiber.Map{"error": "User tidak valid"})
-	}
-	// Ambil user dari DB
-	user, err := s.repo.GetUserByID(uid)
-	if err != nil || user.AlumniID == nil {
-		return c.Status(403).JSON(fiber.Map{"error": "User tidak terkait alumni"})
-	}
-	// Pastikan role benar-benar alumni
-	if user.Role != "alumni" {
-		return c.Status(403).JSON(fiber.Map{"error": "Hanya alumni yang boleh hapus pekerjaan miliknya"})
-	}
-	// Ambil data pekerjaan dulu
-	pekerjaan, err := s.repo.GetByID(id)
-	if err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "Pekerjaan tidak ditemukan"})
-	}
-	// Validasi kepemilikan
-	if pekerjaan.AlumniID != *user.AlumniID {
-		return c.Status(403).JSON(fiber.Map{"error": "Kamu tidak boleh menghapus pekerjaan milik orang lain"})
-	}
-	// Kalau lolos semua → hapus
-	if err := s.repo.Delete(id, user.AlumniID); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal delete pekerjaan"})
-	}
-	return c.JSON(fiber.Map{"success": true, "message": "Pekerjaanmu berhasil dihapus permanen"})
 }

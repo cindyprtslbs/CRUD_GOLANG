@@ -1,349 +1,295 @@
 package repository
 
 import (
-	models "crud-app/app/model"
-	"database/sql"
-	"fmt"
-	"log"
+	"context"
 	"time"
-	// "golang.org/x/text/search"
+	"log"
+	"fmt"
+
+	models "crud-app/app/model"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// ================= INTERFACE =================
 type AlumniRepository interface {
-	GetAll() ([]models.Alumni, error)
-	GetByID(id int) (*models.Alumni, error)
-	Create(req models.CreateAlumniRequest) (*models.Alumni, error)
-	Update(id int, req models.UpdateAlumniRequest) (*models.Alumni, error)
-	// Delete(id int) error
-	SoftDelete(id, userID int, role string) error
-	Restore(alumniID int, userID int) error 
-
-	CountWithoutPekerjaan() (int, error)
-	GetWithoutPekerjaan() ([]models.Alumni, error)
-
-	GetAlumniRepo(search, sortBy, order string, limit, offset int) ([]models.Alumni, error)
-	CountAlumniRepo(search string) (int, error)
+	GetAll(ctx context.Context) ([]models.Alumni, error)
+	GetByID(ctx context.Context, id string) (*models.Alumni, error)
+	Create(ctx context.Context, req *models.CreateAlumniRequest) (*models.Alumni, error)
+	Update(ctx context.Context, id string, req *models.UpdateAlumniRequest) (*models.Alumni, error)
+	SoftDelete(ctx context.Context, id string) error
+	Restore(ctx context.Context, id string) error
+	GetWithoutPekerjaan(ctx context.Context) ([]models.Alumni, error)
+	CountWithoutPekerjaan(ctx context.Context) (int, error)
+	GetAlumniRepo(ctx context.Context, search, sortBy, order string, limit, offset int64) ([]models.Alumni, error)
+	CountAlumniRepo(ctx context.Context, search string) (int64, error)
 }
 
+// ================= STRUCT =================
 type alumniRepository struct {
-	db *sql.DB
+	collection *mongo.Collection
 }
 
-func NewAlumniRepository(db *sql.DB) AlumniRepository {
-	return &alumniRepository{db: db}
+// ================= CONSTRUCTOR =================
+func NewAlumniRepository(database *mongo.Database) AlumniRepository {
+	return &alumniRepository{
+		collection: database.Collection("alumni"),
+	}
 }
 
-func (r *alumniRepository) GetAll() ([]models.Alumni, error) {
-	rows, err := r.db.Query(`
-		SELECT id, user_id, nim, nama, jurusan, angkatan, tahun_lulus, email, no_telepon, alamat, created_at, updated_at
-		FROM alumni
-		WHERE is_deleted = FALSE
-		ORDER BY created_at DESC`)
+// ================= CREATE =================
+func (r *alumniRepository) Create(ctx context.Context, req *models.CreateAlumniRequest) (*models.Alumni, error) {
+	var userObjID *primitive.ObjectID
+	if req.UserID != "" {
+		id, err := primitive.ObjectIDFromHex(req.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("user_id tidak valid: %v", err)
+		}
+		userObjID = &id
+	}
+
+	alumni := models.Alumni{
+		ID:         primitive.NewObjectID(),
+		UserID:     userObjID,
+		NIM:        req.NIM,
+		Nama:       req.Nama,
+		Jurusan:    req.Jurusan,
+		Angkatan:   req.Angkatan,
+		TahunLulus: req.TahunLulus,
+		Email:      req.Email,
+		NoTelepon:  req.NoTelepon,
+		Alamat:     req.Alamat,
+		IsDeleted:  false,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+
+	_, err := r.collection.InsertOne(ctx, alumni)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	return &alumni, nil
+}
+
+
+// ================= GET ALL =================
+func (r *alumniRepository) GetAll(ctx context.Context) ([]models.Alumni, error) {
+	filter := bson.M{"is_deleted": false}
+	cursor, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
 
 	var list []models.Alumni
-	for rows.Next() {
-		var a models.Alumni
-		if err := rows.Scan(&a.ID, &a.UserID, &a.NIM, &a.Nama, &a.Jurusan, &a.Angkatan, &a.TahunLulus,
-			&a.Email, &a.NoTelepon, &a.Alamat, &a.CreatedAt, &a.UpdatedAt); err != nil {
-			return nil, err
-		}
-		list = append(list, a)
+	if err := cursor.All(ctx, &list); err != nil {
+		return nil, err
 	}
 	return list, nil
 }
 
-func (r *alumniRepository) GetByID(id int) (*models.Alumni, error) {
-	var a models.Alumni
-	row := r.db.QueryRow(`
-		SELECT id, user_id, nim, nama, jurusan, angkatan, tahun_lulus,
-			email, no_telepon, alamat, created_at, updated_at, is_deleted
-		FROM alumni WHERE id=$1`, id)
-
-	err := row.Scan(
-		&a.ID,
-		&a.UserID,
-		&a.NIM,
-		&a.Nama,
-		&a.Jurusan,
-		&a.Angkatan,
-		&a.TahunLulus,
-		&a.Email,
-		&a.NoTelepon,
-		&a.Alamat,
-		&a.CreatedAt,
-		&a.UpdatedAt,
-		&a.IsDeleted,
-	)
+// ================= GET BY ID =================
+func (r *alumniRepository) GetByID(ctx context.Context, id string) (*models.Alumni, error) {
+	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, err
 	}
-	return &a, nil
+
+	var alumni models.Alumni
+	err = r.collection.FindOne(ctx, bson.M{"_id": objID, "is_deleted": false}).Decode(&alumni)
+	if err == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	return &alumni, err
 }
 
-func (r *alumniRepository) Create(req models.CreateAlumniRequest) (*models.Alumni, error) {
-	var id int
-	err := r.db.QueryRow(`
-		INSERT INTO alumni (user_id, nim, nama, jurusan, angkatan, tahun_lulus, email, no_telepon, alamat, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id
-	`, req.UserID, req.NIM, req.Nama, req.Jurusan, req.Angkatan, req.TahunLulus,
-		req.Email, req.NoTelepon, req.Alamat, time.Now(), time.Now()).Scan(&id)
-	if err != nil {
-		return nil, err
-	}
-	var newAlumni models.Alumni
-	row := r.db.QueryRow(`
-		SELECT id, user_id, nim, nama, jurusan, angkatan, tahun_lulus, email, no_telepon, alamat, created_at, updated_at
-		FROM alumni 
-		WHERE id=$1
-	`, id)
-
-	err = row.Scan(
-		&newAlumni.ID, &newAlumni.UserID, &newAlumni.NIM, &newAlumni.Nama, &newAlumni.Jurusan,
-		&newAlumni.Angkatan, &newAlumni.TahunLulus, &newAlumni.Email, &newAlumni.NoTelepon,
-		&newAlumni.Alamat, &newAlumni.CreatedAt, &newAlumni.UpdatedAt,
-	)
-
+// ================= UPDATE =================
+func (r *alumniRepository) Update(ctx context.Context, id string, req *models.UpdateAlumniRequest) (*models.Alumni, error) {
+	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return nil, err
 	}
 
-	return &newAlumni, nil
+	update := bson.M{
+		"$set": bson.M{
+			"user_id":      req.UserID,
+			"nim":          req.NIM,
+			"nama":         req.Nama,
+			"jurusan":      req.Jurusan,
+			"angkatan":     req.Angkatan,
+			"tahun_lulus":  req.TahunLulus,
+			"email":        req.Email,
+			"no_telepon":   req.NoTelepon,
+			"alamat":       req.Alamat,
+			"updated_at":   time.Now(),
+		},
+	}
+
+	_, err = r.collection.UpdateOne(ctx, bson.M{"_id": objID}, update)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.GetByID(ctx, id)
 }
 
-func (r *alumniRepository) Update(id int, req models.UpdateAlumniRequest) (*models.Alumni, error) {
-	result, err := r.db.Exec(`
-		UPDATE alumni 
-		SET user_id=$1, nim=$2, nama=$3, jurusan=$4, angkatan=$5, tahun_lulus=$6, email=$7, no_telepon=$8, alamat=$9, updated_at=$10
-		WHERE id=$11
-	`, req.UserID, req.NIM, req.Nama, req.Jurusan, req.Angkatan, req.TahunLulus, req.Email, req.NoTelepon, req.Alamat, time.Now(), id)
-	if err != nil {
-		return nil, err
-	}
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return nil, sql.ErrNoRows
-	}
-	var updated models.Alumni
-	row := r.db.QueryRow(`
-		SELECT id, user_id, nim, nama, jurusan, angkatan, tahun_lulus, email, no_telepon, alamat, created_at, updated_at
-		FROM alumni 
-		WHERE id = $1
-	`, id)
-
-	err = row.Scan(
-		&updated.ID, &updated.UserID, &updated.NIM, &updated.Nama, &updated.Jurusan, &updated.Angkatan, &updated.TahunLulus,
-		&updated.Email, &updated.NoTelepon, &updated.Alamat, &updated.CreatedAt, &updated.UpdatedAt,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-	return &updated, nil
-}
-
-// func (r *alumniRepository) Delete(id int) error {
-// 	result, err := r.db.Exec(`DELETE FROM alumni WHERE id=$1`, id)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	rowsAffected, _ := result.RowsAffected()
-// 	if rowsAffected == 0 {
-// 		return sql.ErrNoRows
-// 	}
-// 	return nil
-// }
-
-// =================== SOFT DELETE ===================
-func (r *alumniRepository) SoftDelete(alumniID int, userID int, role string) error {
-	tx, err := r.db.Begin()
+// ================= SOFT DELETE =================
+func (r *alumniRepository) SoftDelete(ctx context.Context, id string) error {
+	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return err
 	}
 
-	var targetUserID int
-	err = tx.QueryRow(`SELECT user_id FROM alumni WHERE id = $1`, alumniID).Scan(&targetUserID)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("alumni tidak ditemukan: %v", err)
-	}
+	update := bson.M{"$set": bson.M{
+		"is_deleted": true,
+		"updated_at": time.Now(),
+	}}
 
-	// Admin bisa hapus siapa pun, alumni hanya bisa hapus miliknya sendiri
-	if role == "admin" {
-		_, err = tx.Exec(`
-			UPDATE alumni 
-			SET is_deleted = TRUE, updated_at = NOW()
-			WHERE id = $1 AND is_deleted = FALSE
-		`, alumniID)
-	} else {
-		_, err = tx.Exec(`
-			UPDATE alumni 
-			SET is_deleted = TRUE, updated_at = NOW()
-			WHERE id = $1 AND user_id = $2 AND is_deleted = FALSE
-		`, alumniID, userID)
-	}
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("gagal menghapus alumni: %v", err)
-	}
-
-	// Nonaktifkan user terkait alumni
-	_, err = tx.Exec(`
-		UPDATE users 
-		SET is_active = FALSE, updated_at = NOW()
-		WHERE id = $1
-	`, targetUserID)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("gagal menonaktifkan user alumni: %v", err)
-	}
-
-	return tx.Commit()
+	_, err = r.collection.UpdateOne(ctx, bson.M{"_id": objID}, update)
+	return err
 }
 
-
-// =================== RESTORE ===================
-func (r *alumniRepository) Restore(alumniID int, userID int) error {
-	tx, err := r.db.Begin()
+// ================= RESTORE =================
+func (r *alumniRepository) Restore(ctx context.Context, id string) error {
+	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return err
 	}
 
-	// Restore alumni
-	_, err = tx.Exec(`
-		UPDATE alumni 
-		SET is_deleted = FALSE 
-		WHERE id = $1
-	`, alumniID)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("gagal merestore alumni: %w", err)
-	}
+	update := bson.M{"$set": bson.M{
+		"is_deleted": false,
+		"updated_at": time.Now(),
+	}}
 
-	// Aktifkan kembali user terkait
-	_, err = tx.Exec(`
-		UPDATE users 
-		SET is_active = TRUE 
-		WHERE id = $1
-	`, userID)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("gagal mengaktifkan user alumni: %w", err)
-	}
-
-	// Commit perubahan
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+	_, err = r.collection.UpdateOne(ctx, bson.M{"_id": objID}, update)
+	return err
 }
 
+// ================= GET WITHOUT PEKERJAAN =================
+func (r *alumniRepository) GetWithoutPekerjaan(ctx context.Context) ([]models.Alumni, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$lookup", Value: bson.M{
+			"from":         "pekerjaan_alumni",
+			"localField":   "_id",
+			"foreignField": "alumni_id",
+			"as":           "pekerjaan",
+		}}},
+		{{Key: "$match", Value: bson.M{
+			"pekerjaan":  bson.M{"$size": 0},
+			"is_deleted": false,
+		}}},
+	}
 
-// =================== WITHOUT PEKERJAAN ===================
-func (r *alumniRepository) CountWithoutPekerjaan() (int, error) {
-	var count int
-	err := r.db.QueryRow(`
-        SELECT COUNT(*) AS jumlah_alumni_tanpa_pekerjaan
-		FROM alumni a
-		LEFT JOIN pekerjaan_alumni p
-			ON a.id = p.alumni_id
-		WHERE p.alumni_id IS NULL;
-    `).Scan(&count)
+	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var alumniList []models.Alumni
+	if err := cursor.All(ctx, &alumniList); err != nil {
+		return nil, err
+	}
+	return alumniList, nil
+}
+
+// ================= COUNT WITHOUT PEKERJAAN =================
+func (r *alumniRepository) CountWithoutPekerjaan(ctx context.Context) (int, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$lookup", Value: bson.M{
+			"from":         "pekerjaan_alumni",
+			"localField":   "_id",
+			"foreignField": "alumni_id",
+			"as":           "pekerjaan",
+		}}},
+		{{Key: "$match", Value: bson.M{
+			"pekerjaan":  bson.M{"$size": 0},
+			"is_deleted": false,
+		}}},
+		{{Key: "$count", Value: "total"}},
+	}
+
+	cursor, err := r.collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return 0, err
 	}
-	return count, nil
+	defer cursor.Close(ctx)
+
+	var results []bson.M
+	if err := cursor.All(ctx, &results); err != nil {
+		return 0, err
+	}
+
+	if len(results) == 0 {
+		return 0, nil
+	}
+
+	switch v := results[0]["total"].(type) {
+	case int32:
+		return int(v), nil
+	case int64:
+		return int(v), nil
+	case float64:
+		return int(v), nil
+	default:
+		return 0, nil
+	}
 }
 
-func (r *alumniRepository) GetWithoutPekerjaan() ([]models.Alumni, error) {
-	rows, err := r.db.Query(`
-		SELECT a.id, a.user_id, a.nim, a.nama, a.jurusan, a.angkatan, 
-			a.tahun_lulus, a.email, a.no_telepon, a.alamat, 
-			a.created_at, a.updated_at
-		FROM alumni a
-		LEFT JOIN pekerjaan_alumni p ON a.id = p.alumni_id
-		WHERE p.alumni_id IS NULL
-	`)
-
-	if err != nil {
-		return nil, err
+// ================= SEARCH + SORT + PAGINATION =================
+func (r *alumniRepository) GetAlumniRepo(ctx context.Context, search, sortBy, order string, limit, offset int64) ([]models.Alumni, error) {
+	filter := bson.M{
+		"is_deleted": false,
+		"$or": []bson.M{
+			{"nim": bson.M{"$regex": search, "$options": "i"}},
+			{"nama": bson.M{"$regex": search, "$options": "i"}},
+			{"jurusan": bson.M{"$regex": search, "$options": "i"}},
+			{"email": bson.M{"$regex": search, "$options": "i"}},
+			{"no_telepon": bson.M{"$regex": search, "$options": "i"}},
+			{"alamat": bson.M{"$regex": search, "$options": "i"}},
+		},
 	}
-	defer rows.Close()
 
-	var list []models.Alumni
-	for rows.Next() {
-		var a models.Alumni
-		if err := rows.Scan(
-			&a.ID, &a.UserID, &a.NIM, &a.Nama, &a.Jurusan, &a.Angkatan,
-			&a.TahunLulus, &a.Email, &a.NoTelepon, &a.Alamat,
-			&a.CreatedAt, &a.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-
-		list = append(list, a)
+	sortOrder := 1
+	if order == "desc" {
+		sortOrder = -1
 	}
-	return list, nil
-}
 
-func (r *alumniRepository) GetAlumniRepo(search, sortBy, order string, limit, offset int) ([]models.Alumni, error) {
-	query := fmt.Sprintf(`
-		SELECT id, user_id, nim, nama, jurusan, angkatan, tahun_lulus, 
-			email, no_telepon, alamat, created_at, updated_at
-		FROM alumni
-		WHERE nama ILIKE $1 
-		OR nim ILIKE $1 
-		OR email ILIKE $1 
-		OR jurusan ILIKE $1 
-		OR CAST(angkatan AS TEXT) ILIKE $1 
-		OR CAST(tahun_lulus AS TEXT) ILIKE $1
-		OR no_telepon ILIKE $1
-		OR alamat ILIKE $1
-		ORDER BY %s %s
-		LIMIT $2 OFFSET $3
-	`, sortBy, order)
+	opts := options.Find().
+		SetSort(bson.D{{Key: sortBy, Value: sortOrder}}).
+		SetLimit(limit).
+		SetSkip(offset)
 
-	rows, err := r.db.Query(query, "%"+search+"%", limit, offset)
+	cursor, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {
 		log.Println("Query error:", err)
 		return nil, err
 	}
-	defer rows.Close()
+	defer cursor.Close(ctx)
 
 	var alumni []models.Alumni
-	for rows.Next() {
-		var a models.Alumni
-		if err := rows.Scan(
-			&a.ID, &a.UserID, &a.NIM, &a.Nama, &a.Jurusan,
-			&a.Angkatan, &a.TahunLulus, &a.Email, &a.NoTelepon,
-			&a.Alamat, &a.CreatedAt, &a.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-
-		alumni = append(alumni, a)
+	if err := cursor.All(ctx, &alumni); err != nil {
+		return nil, err
 	}
 	return alumni, nil
 }
 
-func (r *alumniRepository) CountAlumniRepo(search string) (int, error) {
-	var total int
-	countQuery := `SELECT COUNT(*) FROM alumni
-	WHERE nama ILIKE $1 
-		OR nim ILIKE $1 
-		OR email ILIKE $1 
-		OR jurusan ILIKE $1 
-		OR CAST(angkatan AS TEXT) ILIKE $1 
-		OR CAST(tahun_lulus AS TEXT) ILIKE $1
-		OR no_telepon ILIKE $1
-		OR alamat ILIKE $1`
-	err := r.db.QueryRow(countQuery, "%"+search+"%").Scan(&total)
-	if err != nil && err != sql.ErrNoRows {
-		return 0, err
+// ================= COUNT ALUMNI =================
+func (r *alumniRepository) CountAlumniRepo(ctx context.Context, search string) (int64, error) {
+	filter := bson.M{
+		"is_deleted": false,
+		"$or": []bson.M{
+			{"nim": bson.M{"$regex": search, "$options": "i"}},
+			{"nama": bson.M{"$regex": search, "$options": "i"}},
+			{"jurusan": bson.M{"$regex": search, "$options": "i"}},
+			{"email": bson.M{"$regex": search, "$options": "i"}},
+			{"no_telepon": bson.M{"$regex": search, "$options": "i"}},
+			{"alamat": bson.M{"$regex": search, "$options": "i"}},
+		},
 	}
-	return total, nil
+	count, err := r.collection.CountDocuments(ctx, filter)
+	return count, err
 }
