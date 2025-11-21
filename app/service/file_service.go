@@ -36,13 +36,14 @@ func NewFileService(repo repository.FileRepository, uploadPath string) FileServi
 // @Summary Upload foto (profile picture)
 // @Description Upload file foto dengan maksimal 1 MB
 // @Accept mpfd
+// @Tags Files
 // @Produce json
 // @Param file formData file true "Image file (JPEG/PNG)"
 // @Param user_id formData string false "User ID (untuk admin upload)"
-// @Success 201 {object} fiber.Map
-// @Failure 400 {object} fiber.Map
-// @Failure 413 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 413 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /files/upload/foto [post]
 func (s *fileService) UploadFoto(c *fiber.Ctx) error {
@@ -53,14 +54,15 @@ func (s *fileService) UploadFoto(c *fiber.Ctx) error {
 
 // @Summary Upload sertifikat (PDF)
 // @Description Upload file sertifikat dalam format PDF dengan maksimal 2 MB
+// @Tags Files
 // @Accept mpfd
 // @Produce json
 // @Param file formData file true "PDF file"
 // @Param user_id formData string false "User ID (untuk admin upload)"
-// @Success 201 {object} fiber.Map
-// @Failure 400 {object} fiber.Map
-// @Failure 413 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 413 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /files/upload/sertifikat [post]
 func (s *fileService) UploadSertifikat(c *fiber.Ctx) error {
@@ -72,6 +74,8 @@ func (s *fileService) UploadSertifikat(c *fiber.Ctx) error {
 // @Summary Internal upload handler
 // @Description Handler internal untuk upload file
 // @Hidden
+// @Tags Files
+// @Security Bearer
 func (s *fileService) uploadHandler(c *fiber.Ctx, allowedTypes []string, maxSizeMB int64) error {
 
 	roleVal := c.Locals("role")
@@ -198,9 +202,10 @@ func (s *fileService) uploadHandler(c *fiber.Ctx, allowedTypes []string, maxSize
 
 // @Summary Get all files
 // @Description Get daftar semua file (admin melihat semua, user hanya miliknya)
+// @Tags Files
 // @Produce json
-// @Success 200 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /files [get]
 func (s *fileService) GetAllFiles(c *fiber.Ctx) error {
@@ -238,10 +243,11 @@ func (s *fileService) GetAllFiles(c *fiber.Ctx) error {
 
 // @Summary Get file by ID
 // @Description Get detail file berdasarkan ID
+// @Tags Files
 // @Produce json
 // @Param id path string true "File ID"
-// @Success 200 {object} fiber.Map
-// @Failure 404 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
 // @Security Bearer
 // @Router /files/{id} [get]
 func (s *fileService) GetFileByID(c *fiber.Ctx) error {
@@ -263,11 +269,12 @@ func (s *fileService) GetFileByID(c *fiber.Ctx) error {
 
 // @Summary Delete file
 // @Description Hapus file dari storage dan database
+// @Tags Files
 // @Produce json
 // @Param id path string true "File ID"
-// @Success 200 {object} fiber.Map
-// @Failure 404 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /files/{id} [delete]
 func (s *fileService) DeleteFile(c *fiber.Ctx) error {

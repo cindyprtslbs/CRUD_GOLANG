@@ -24,11 +24,13 @@ func NewAuthService(r repository.AuthRepository) *AuthService {
 // @Summary Login user
 // @Description Login dengan username dan password
 // @Accept json
+// @Tags Auth
 // @Produce json
 // @Param loginRequest body models.LoginRequest true "Login Request"
-// @Success 200 {object} fiber.Map
-// @Failure 400 {object} fiber.Map
-// @Failure 401 {object} fiber.Map
+// @Success 200 {object} map[string]interface{} "Berhasil mendapatkan semua user"
+// @Failure 403 {object} map[string]interface{} "Akses ditolak, bukan admin"
+// @Failure 500 {object} map[string]interface{} "Kesalahan server"
+// @Security Bearer
 // @Router /api/login [post]
 func (s *AuthService) Login(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -91,8 +93,8 @@ func (s *AuthService) Login(c *fiber.Ctx) error {
 // @Summary Get user profile
 // @Description Get profile dari user yang sedang login
 // @Produce json
-// @Success 200 {object} fiber.Map
-// @Failure 401 {object} fiber.Map
+// @Success 200 {object} map[string]interface{} "Berhasil login dan mengembalikan token"
+// @Failure 401 {object} map[string]interface{} "Username/password salah"
 // @Security Bearer
 // @Router /api/profile [get]
 func (s *AuthService) GetProfile(c *fiber.Ctx) error {

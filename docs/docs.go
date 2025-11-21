@@ -17,259 +17,1491 @@ const docTemplate = `{
     "paths": {
         "/api/login": {
             "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Login dengan username dan password",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
                 "summary": "Login user",
-                "description": "Autentikasi user dan mengembalikan token JWT",
-                "tags": ["Auth"],
-                "consumes": ["application/json"],
-                "produces": ["application/json"],
                 "parameters": [
                     {
-                        "name": "body",
+                        "description": "Login Request",
+                        "name": "loginRequest",
                         "in": "body",
                         "required": true,
-                        "schema": {"type": "object"}
+                        "schema": {
+                            "$ref": "#/definitions/models.LoginRequest"
+                        }
                     }
                 ],
                 "responses": {
-                    "200": {"description": "Login berhasil"},
-                    "401": {"description": "Unauthorized"}
+                    "200": {
+                        "description": "Berhasil mendapatkan semua user",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Akses ditolak, bukan admin",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Kesalahan server",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
                 }
             }
         },
         "/api/profile": {
             "get": {
-                "summary": "Mendapatkan profil user yang sedang login",
-                "description": "Mengambil data profil user berdasarkan token JWT",
-                "tags": ["Auth"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Get profile dari user yang sedang login",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get user profile",
                 "responses": {
-                    "200": {"description": "Profile user"},
-                    "401": {"description": "Unauthorized"}
+                    "200": {
+                        "description": "Berhasil login dan mengembalikan token",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Username/password salah",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/files": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Get daftar semua file (admin melihat semua, user hanya miliknya)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Get all files",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/files/upload/foto": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Upload file foto dengan maksimal 1 MB",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Upload foto (profile picture)",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Image file (JPEG/PNG)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "User ID (untuk admin upload)",
+                        "name": "user_id",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/files/upload/sertifikat": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Upload file sertifikat dalam format PDF dengan maksimal 2 MB",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Upload sertifikat (PDF)",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "PDF file",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "User ID (untuk admin upload)",
+                        "name": "user_id",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/files/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Get detail file berdasarkan ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Get file by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Hapus file dari storage dan database",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Delete file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
                 }
             }
         },
         "/unair/alumni": {
             "get": {
-                "summary": "Mendapatkan daftar alumni dengan pagination dan filter",
-                "tags": ["Alumni"],
-                "produces": ["application/json"],
-                "parameters": [
-                    {"name": "page", "in": "query", "type": "integer", "default": 1},
-                    {"name": "limit", "in": "query", "type": "integer", "default": 10},
-                    {"name": "sortBy", "in": "query", "type": "string"},
-                    {"name": "order", "in": "query", "type": "string"},
-                    {"name": "search", "in": "query", "type": "string"}
+                "security": [
+                    {
+                        "Bearer": []
+                    }
                 ],
-                "responses": {"200": {"description": "Daftar alumni"}}
+                "description": "Mengambil daftar alumni berdasarkan parameter pencarian, pengurutan, dan batas halaman dengan informasi meta",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Alumni"
+                ],
+                "summary": "Mendapatkan daftar alumni dengan pencarian, sorting, dan pagination",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Nomor halaman (default: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Jumlah data per halaman (default: 10)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Kolom untuk sorting: nim, nama, jurusan, angkatan, tahun_lulus, email, created_at (default: nama)",
+                        "name": "sortBy",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Urutan sorting: asc atau desc (default: asc)",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Kata kunci pencarian di semua field",
+                        "name": "search",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success response dengan data alumni dan meta informasi",
+                        "schema": {
+                            "$ref": "#/definitions/models.AlumniResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "error response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             },
             "post": {
-                "summary": "Menambah data alumni baru",
-                "tags": ["Alumni"],
-                "consumes": ["application/json"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [
-                    {"name": "body", "in": "body", "required": true, "schema": {"type": "object"}}
+                "security": [
+                    {
+                        "Bearer": []
+                    }
                 ],
-                "responses": {"201": {"description": "Alumni berhasil ditambahkan"}}
+                "description": "Menambahkan data alumni ke dalam database (hanya admin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Alumni"
+                ],
+                "summary": "Menambah data alumni baru",
+                "parameters": [
+                    {
+                        "description": "Data Alumni Baru (NIM, Nama, Jurusan, Email, TahunLulus)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateAlumniRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "success response dengan data alumni baru",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "request body tidak valid atau field kosong",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "error response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
-        "/unair/alumni/{id}": {
+        "/unair/alumni/all": {
             "get": {
-                "summary": "Mendapatkan data alumni berdasarkan ID",
-                "tags": ["Alumni"],
-                "produces": ["application/json"],
-                "parameters": [{"name": "id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "Data alumni"}}
-            },
-            "put": {
-                "summary": "Mengupdate data alumni",
-                "tags": ["Alumni"],
-                "consumes": ["application/json"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [
-                    {"name": "id", "in": "path", "required": true, "type": "string"},
-                    {"name": "body", "in": "body", "required": true, "schema": {"type": "object"}}
+                "security": [
+                    {
+                        "Bearer": []
+                    }
                 ],
-                "responses": {"200": {"description": "Alumni berhasil diupdate"}}
-            },
-            "delete": {
-                "summary": "Menghapus alumni (soft delete)",
-                "tags": ["Alumni"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [{"name": "id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "Alumni berhasil dihapus"}}
-            },
-            "patch": {
-                "summary": "Merestore alumni yang dihapus",
-                "tags": ["Alumni"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [{"name": "id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "Alumni berhasil direstore"}}
+                "description": "Mengambil seluruh data alumni dari database tanpa pagination",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Alumni"
+                ],
+                "summary": "Mendapatkan semua data alumni",
+                "responses": {
+                    "200": {
+                        "description": "success response dengan array data alumni",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "error response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
         "/unair/alumni/without-pekerjaan": {
             "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Mengambil daftar alumni yang belum memiliki pekerjaan dengan jumlah totalnya",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Alumni"
+                ],
                 "summary": "Mendapatkan alumni tanpa pekerjaan",
-                "tags": ["Alumni"],
-                "produces": ["application/json"],
-                "responses": {"200": {"description": "Daftar alumni tanpa pekerjaan"}}
+                "responses": {
+                    "200": {
+                        "description": "success response dengan array data alumni tanpa pekerjaan",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "error response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/unair/alumni/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Mengambil data alumni tertentu berdasarkan ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Alumni"
+                ],
+                "summary": "Mendapatkan data alumni berdasarkan ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID Alumni (MongoDB ObjectID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success response dengan data alumni",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "alumni tidak ditemukan",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "error response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Mengubah data alumni berdasarkan ID (hanya admin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Alumni"
+                ],
+                "summary": "Mengupdate data alumni",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID Alumni (MongoDB ObjectID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Data Alumni yang Diupdate (minimal NIM, Nama, Jurusan, Email, TahunLulus)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateAlumniRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success response dengan data alumni yang diupdate",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "request body tidak valid atau field kosong",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "alumni tidak ditemukan",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "error response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Mengubah status alumni menjadi nonaktif tanpa menghapus data dari database",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Alumni"
+                ],
+                "summary": "Menghapus alumni (soft delete)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID Alumni (MongoDB ObjectID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success response dengan message",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "alumni tidak ditemukan",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "error response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Mengembalikan alumni yang sebelumnya dihapus (soft delete) menjadi aktif kembali",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Alumni"
+                ],
+                "summary": "Merestore alumni yang dihapus",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID Alumni (MongoDB ObjectID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success response dengan message",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "error response",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
         "/unair/pekerjaan-alumni": {
             "get": {
-                "summary": "Mendapatkan daftar pekerjaan alumni",
-                "tags": ["Pekerjaan"],
-                "produces": ["application/json"],
-                "responses": {"200": {"description": "Daftar pekerjaan"}}
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Get data pekerjaan dengan fitur pagination, search, dan sort",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pekerjaan_Alumni"
+                ],
+                "summary": "Get pekerjaan with pagination",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Items per page",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search keyword",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "created_at",
+                        "description": "Sort by field",
+                        "name": "sortBy",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "asc",
+                        "description": "Sort order",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.PekerjaanResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             },
             "post": {
-                "summary": "Menambah data pekerjaan baru",
-                "tags": ["Pekerjaan"],
-                "consumes": ["application/json"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [
-                    {"name": "body", "in": "body", "required": true, "schema": {"type": "object"}}
+                "security": [
+                    {
+                        "Bearer": []
+                    }
                 ],
-                "responses": {"201": {"description": "Pekerjaan berhasil ditambahkan"}}
-            }
-        },
-        "/unair/pekerjaan-alumni/{id}": {
-            "get": {
-                "summary": "Mendapatkan data pekerjaan berdasarkan ID",
-                "tags": ["Pekerjaan"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [{"name": "id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "Data pekerjaan"}}
-            },
-            "put": {
-                "summary": "Mengupdate data pekerjaan",
-                "tags": ["Pekerjaan"],
-                "consumes": ["application/json"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [
-                    {"name": "id", "in": "path", "required": true, "type": "string"},
-                    {"name": "body", "in": "body", "required": true, "schema": {"type": "object"}}
+                "description": "Tambah data pekerjaan alumni baru (admin only)",
+                "consumes": [
+                    "application/json"
                 ],
-                "responses": {"200": {"description": "Pekerjaan berhasil diupdate"}}
-            },
-            "delete": {
-                "summary": "Menghapus data pekerjaan (soft delete)",
-                "tags": ["Pekerjaan"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [{"name": "id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "Pekerjaan berhasil dihapus"}}
-            },
-            "patch": {
-                "summary": "Merestore data pekerjaan",
-                "tags": ["Pekerjaan"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [{"name": "id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "Pekerjaan berhasil direstore"}}
-            }
-        },
-        "/unair/pekerjaan-alumni/trash": {
-            "get": {
-                "summary": "Mendapatkan daftar pekerjaan alumni yang dihapus (trash)",
-                "tags": ["Pekerjaan"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "responses": {"200": {"description": "Daftar pekerjaan di trash"}}
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pekerjaan_Alumni"
+                ],
+                "summary": "Create new pekerjaan",
+                "parameters": [
+                    {
+                        "description": "Create Pekerjaan Request",
+                        "name": "pekerjaanRequest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreatePekerjaanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
         "/unair/pekerjaan-alumni/alumni/{alumni_id}": {
             "get": {
-                "summary": "Mendapatkan pekerjaan berdasarkan ID alumni",
-                "tags": ["Pekerjaan"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [{"name": "alumni_id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "Daftar pekerjaan alumni"}}
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Get data pekerjaan berdasarkan alumni ID (admin only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pekerjaan_Alumni"
+                ],
+                "summary": "Get pekerjaan by alumni ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Alumni ID",
+                        "name": "alumni_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
-        "/unair/pekerjaan-alumni/restore/{id}": {
-            "put": {
-                "summary": "Merestore pekerjaan dari trash",
-                "tags": ["Pekerjaan"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [{"name": "id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "Pekerjaan berhasil direstore"}}
+        "/unair/pekerjaan-alumni/trash": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Get data pekerjaan yang telah dihapus (soft delete)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pekerjaan_Alumni"
+                ],
+                "summary": "Get deleted pekerjaan (trash)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
         "/unair/pekerjaan-alumni/trash/delete/{id}": {
             "delete": {
-                "summary": "Menghapus permanen pekerjaan dari trash",
-                "tags": ["Pekerjaan"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [{"name": "id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "Pekerjaan berhasil dihapus permanen"}}
-            }
-        },
-        "/files": {
-            "get": {
-                "summary": "Mendapatkan semua file yang diupload",
-                "tags": ["Upload"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "responses": {"200": {"description": "Daftar file"}}
-            }
-        },
-        "/files/upload/foto": {
-            "post": {
-                "summary": "Upload foto alumni",
-                "tags": ["Upload"],
-                "consumes": ["multipart/form-data"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [
-                    {"name": "file", "in": "formData", "required": true, "type": "file"}
+                "security": [
+                    {
+                        "Bearer": []
+                    }
                 ],
-                "responses": {"201": {"description": "Foto berhasil diupload"}}
-            }
-        },
-        "/files/upload/sertifikat": {
-            "post": {
-                "summary": "Upload sertifikat alumni",
-                "tags": ["Upload"],
-                "consumes": ["multipart/form-data"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [
-                    {"name": "file", "in": "formData", "required": true, "type": "file"}
+                "description": "Hapus permanen data pekerjaan dari database",
+                "produces": [
+                    "application/json"
                 ],
-                "responses": {"201": {"description": "Sertifikat berhasil diupload"}}
+                "tags": [
+                    "Pekerjaan_Alumni"
+                ],
+                "summary": "Hard delete pekerjaan permanently",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pekerjaan ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             }
         },
-        "/files/{id}": {
+        "/unair/pekerjaan-alumni/{id}": {
             "get": {
-                "summary": "Mendapatkan file berdasarkan ID",
-                "tags": ["Upload"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [{"name": "id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "Data file"}}
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Get detail data pekerjaan berdasarkan ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pekerjaan_Alumni"
+                ],
+                "summary": "Get pekerjaan by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pekerjaan ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Update data pekerjaan (admin only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pekerjaan_Alumni"
+                ],
+                "summary": "Update pekerjaan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pekerjaan ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update Pekerjaan Request",
+                        "name": "pekerjaanRequest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdatePekerjaanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
             },
             "delete": {
-                "summary": "Menghapus file berdasarkan ID",
-                "tags": ["Upload"],
-                "produces": ["application/json"],
-                "security": [{"ApiKeyAuth": []}],
-                "parameters": [{"name": "id", "in": "path", "required": true, "type": "string"}],
-                "responses": {"200": {"description": "File berhasil dihapus"}}
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Hapus data pekerjaan (soft delete)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pekerjaan_Alumni"
+                ],
+                "summary": "Soft delete pekerjaan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pekerjaan ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "Restore data pekerjaan yang telah dihapus",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pekerjaan_Alumni"
+                ],
+                "summary": "Restore deleted pekerjaan",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pekerjaan ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "models.Alumni": {
+            "type": "object",
+            "properties": {
+                "alamat": {
+                    "type": "string"
+                },
+                "angkatan": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_deleted": {
+                    "type": "boolean"
+                },
+                "jurusan": {
+                    "type": "string"
+                },
+                "nama": {
+                    "type": "string"
+                },
+                "nim": {
+                    "type": "string"
+                },
+                "no_telepon": {
+                    "type": "string"
+                },
+                "tahun_lulus": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.AlumniResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Alumni"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/models.MetaInfo"
+                }
+            }
+        },
+        "models.CreateAlumniRequest": {
+            "type": "object",
+            "properties": {
+                "alamat": {
+                    "type": "string"
+                },
+                "angkatan": {
+                    "type": "integer"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "jurusan": {
+                    "type": "string"
+                },
+                "nama": {
+                    "type": "string"
+                },
+                "nim": {
+                    "type": "string"
+                },
+                "no_telepon": {
+                    "type": "string"
+                },
+                "tahun_lulus": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "description": "string ID dari frontend",
+                    "type": "string"
+                }
+            }
+        },
+        "models.CreatePekerjaanRequest": {
+            "type": "object",
+            "properties": {
+                "alumni_id": {
+                    "description": "string dulu, nanti dikonversi ke ObjectID",
+                    "type": "string"
+                },
+                "bidang_industri": {
+                    "type": "string"
+                },
+                "deskripsi_pekerjaan": {
+                    "type": "string"
+                },
+                "gaji_range": {
+                    "type": "string"
+                },
+                "lokasi_kerja": {
+                    "type": "string"
+                },
+                "nama_perusahaan": {
+                    "type": "string"
+                },
+                "posisi_jabatan": {
+                    "type": "string"
+                },
+                "status_pekerjaan": {
+                    "type": "string"
+                },
+                "tanggal_mulai_kerja": {
+                    "description": "format ISO date",
+                    "type": "string"
+                },
+                "tanggal_selesai_kerja": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.LoginRequest": {
+            "type": "object",
+            "properties": {
+                "password": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MetaInfo": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "order": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "pages": {
+                    "type": "integer"
+                },
+                "search": {
+                    "type": "string"
+                },
+                "sortBy": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.Pekerjaan": {
+            "type": "object",
+            "properties": {
+                "alumni_id": {
+                    "type": "string"
+                },
+                "bidang_industri": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "deskripsi_pekerjaan": {
+                    "type": "string"
+                },
+                "gaji_range": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lokasi_kerja": {
+                    "type": "string"
+                },
+                "nama_perusahaan": {
+                    "type": "string"
+                },
+                "posisi_jabatan": {
+                    "type": "string"
+                },
+                "status_pekerjaan": {
+                    "type": "string"
+                },
+                "tanggal_mulai_kerja": {
+                    "type": "string"
+                },
+                "tanggal_selesai_kerja": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.PekerjaanResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Pekerjaan"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/models.MetaInfo"
+                }
+            }
+        },
+        "models.UpdateAlumniRequest": {
+            "type": "object",
+            "properties": {
+                "alamat": {
+                    "type": "string"
+                },
+                "angkatan": {
+                    "type": "integer"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "jurusan": {
+                    "type": "string"
+                },
+                "nama": {
+                    "type": "string"
+                },
+                "nim": {
+                    "type": "string"
+                },
+                "no_telepon": {
+                    "type": "string"
+                },
+                "tahun_lulus": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.UpdatePekerjaanRequest": {
+            "type": "object",
+            "properties": {
+                "bidang_industri": {
+                    "type": "string"
+                },
+                "deskripsi_pekerjaan": {
+                    "type": "string"
+                },
+                "gaji_range": {
+                    "type": "string"
+                },
+                "lokasi_kerja": {
+                    "type": "string"
+                },
+                "nama_perusahaan": {
+                    "type": "string"
+                },
+                "posisi_jabatan": {
+                    "type": "string"
+                },
+                "status_pekerjaan": {
+                    "type": "string"
+                },
+                "tanggal_mulai_kerja": {
+                    "type": "string"
+                },
+                "tanggal_selesai_kerja": {
+                    "type": "string"
+                }
             }
         }
     },
     "securityDefinitions": {
-        "ApiKeyAuth": {
+        "Bearer": {
+            "description": "\"JWT Token dengan prefix 'Bearer '\"",
             "type": "apiKey",
             "name": "Authorization",
-            "in": "header",
-            "description": "JWT Token dengan prefix 'Bearer '"
+            "in": "header"
         }
     }
 }`
@@ -280,8 +1512,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "localhost:3000",
 	BasePath:         "/",
 	Schemes:          []string{"http"},
-	Title:            "CRUD App API",
-	Description:      "API untuk mengelola data alumni dengan MongoDB menggunakan Clean Architecture",
+	Title:            "CRUD APPLICATION",
+	Description:      "API sederhana untuk operasi CRUD menggunakan Fiber dan MongoDB",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

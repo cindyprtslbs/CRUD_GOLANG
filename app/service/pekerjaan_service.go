@@ -22,10 +22,12 @@ func NewPekerjaanService(r repository.PekerjaanRepository) *PekerjaanService {
 
 // @Summary Get all pekerjaan
 // @Description Get daftar semua data pekerjaan alumni
+// @Tags Pekerjaan_Alumni
 // @Produce json
-// @Success 200 {object} fiber.Map
-// @Failure 404 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Security Bearer
 // @Router /unair/pekerjaan-alumni [get]
 func (s *PekerjaanService) GetAll(c *fiber.Ctx) error {
 	ctx := context.Background()
@@ -44,11 +46,12 @@ func (s *PekerjaanService) GetAll(c *fiber.Ctx) error {
 
 // @Summary Get pekerjaan by ID
 // @Description Get detail data pekerjaan berdasarkan ID
+// @Tags Pekerjaan_Alumni
 // @Produce json
 // @Param id path string true "Pekerjaan ID"
-// @Success 200 {object} fiber.Map
-// @Failure 404 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /unair/pekerjaan-alumni/{id} [get]
 func (s *PekerjaanService) GetByID(c *fiber.Ctx) error {
@@ -68,11 +71,12 @@ func (s *PekerjaanService) GetByID(c *fiber.Ctx) error {
 
 // @Summary Get pekerjaan by alumni ID
 // @Description Get data pekerjaan berdasarkan alumni ID (admin only)
+// @Tags Pekerjaan_Alumni
 // @Produce json
 // @Param alumni_id path string true "Alumni ID"
-// @Success 200 {object} fiber.Map
-// @Failure 404 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /unair/pekerjaan-alumni/alumni/{alumni_id} [get]
 func (s *PekerjaanService) GetByAlumniID(c *fiber.Ctx) error {
@@ -92,11 +96,12 @@ func (s *PekerjaanService) GetByAlumniID(c *fiber.Ctx) error {
 // @Summary Create new pekerjaan
 // @Description Tambah data pekerjaan alumni baru (admin only)
 // @Accept json
+// @Tags Pekerjaan_Alumni
 // @Produce json
 // @Param pekerjaanRequest body models.CreatePekerjaanRequest true "Create Pekerjaan Request"
-// @Success 201 {object} fiber.Map
-// @Failure 400 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /unair/pekerjaan-alumni [post]
 func (s *PekerjaanService) Create(c *fiber.Ctx) error {
@@ -140,14 +145,15 @@ func (s *PekerjaanService) Create(c *fiber.Ctx) error {
 
 // @Summary Update pekerjaan
 // @Description Update data pekerjaan (admin only)
+// @Tags Pekerjaan_Alumni
 // @Accept json
 // @Produce json
 // @Param id path string true "Pekerjaan ID"
 // @Param pekerjaanRequest body models.UpdatePekerjaanRequest true "Update Pekerjaan Request"
-// @Success 200 {object} fiber.Map
-// @Failure 400 {object} fiber.Map
-// @Failure 404 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /unair/pekerjaan-alumni/{id} [put]
 func (s *PekerjaanService) Update(c *fiber.Ctx) error {
@@ -178,11 +184,12 @@ func (s *PekerjaanService) Update(c *fiber.Ctx) error {
 
 // @Summary Soft delete pekerjaan
 // @Description Hapus data pekerjaan (soft delete)
+// @Tags Pekerjaan_Alumni
 // @Produce json
 // @Param id path string true "Pekerjaan ID"
-// @Success 200 {object} fiber.Map
-// @Failure 403 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /unair/pekerjaan-alumni/{id} [delete]
 func (s *PekerjaanService) SoftDelete(c *fiber.Ctx) error {
@@ -218,11 +225,12 @@ func (s *PekerjaanService) SoftDelete(c *fiber.Ctx) error {
 
 // @Summary Restore deleted pekerjaan
 // @Description Restore data pekerjaan yang telah dihapus
+// @Tags Pekerjaan_Alumni
 // @Produce json
 // @Param id path string true "Pekerjaan ID"
-// @Success 200 {object} fiber.Map
-// @Failure 403 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /unair/pekerjaan-alumni/{id} [patch]
 func (s *PekerjaanService) Restore(c *fiber.Ctx) error {
@@ -245,9 +253,10 @@ func (s *PekerjaanService) Restore(c *fiber.Ctx) error {
 
 // @Summary Get deleted pekerjaan (trash)
 // @Description Get data pekerjaan yang telah dihapus (soft delete)
+// @Tags Pekerjaan_Alumni
 // @Produce json
-// @Success 200 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /unair/pekerjaan-alumni/trash [get]
 func (s *PekerjaanService) GetTrash(c *fiber.Ctx) error {
@@ -272,10 +281,11 @@ func (s *PekerjaanService) GetTrash(c *fiber.Ctx) error {
 
 // @Summary Hard delete pekerjaan permanently
 // @Description Hapus permanen data pekerjaan dari database
+// @Tags Pekerjaan_Alumni
 // @Produce json
 // @Param id path string true "Pekerjaan ID"
-// @Success 200 {object} fiber.Map
-// @Failure 500 {object} fiber.Map
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
 // @Security Bearer
 // @Router /unair/pekerjaan-alumni/trash/delete/{id} [delete]
 func (s *PekerjaanService) Delete(c *fiber.Ctx) error {
@@ -300,6 +310,7 @@ func (s *PekerjaanService) Delete(c *fiber.Ctx) error {
 
 // @Summary Get pekerjaan with pagination
 // @Description Get data pekerjaan dengan fitur pagination, search, dan sort
+// @Tags Pekerjaan_Alumni
 // @Produce json
 // @Param page query int false "Page number" default(1)
 // @Param limit query int false "Items per page" default(10)
@@ -307,7 +318,8 @@ func (s *PekerjaanService) Delete(c *fiber.Ctx) error {
 // @Param sortBy query string false "Sort by field" default(created_at)
 // @Param order query string false "Sort order" default(asc)
 // @Success 200 {object} models.PekerjaanResponse
-// @Failure 500 {object} fiber.Map
+// @Failure 500 {object} map[string]interface{}
+// @Security Bearer
 // @Router /unair/pekerjaan-alumni [get]
 func (s *PekerjaanService) GetPekerjaanService(c *fiber.Ctx) error {
 	ctx := context.Background()

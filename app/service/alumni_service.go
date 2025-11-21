@@ -28,9 +28,9 @@ func NewAlumniService(r repository.AlumniRepository) *AlumniService {
 // @Tags Alumni
 // @Accept json
 // @Produce json
-// @Security ApiKeyAuth
 // @Success 200 {object} map[string]interface{} "success response dengan array data alumni"
 // @Failure 500 {object} map[string]interface{} "error response"
+// @Security Bearer
 // @Router /unair/alumni/all [get]
 func (s *AlumniService) GetAll(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -59,6 +59,7 @@ func (s *AlumniService) GetAll(c *fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{} "success response dengan data alumni"
 // @Failure 404 {object} map[string]interface{} "alumni tidak ditemukan"
 // @Failure 500 {object} map[string]interface{} "error response"
+// @Security Bearer
 // @Router /unair/alumni/{id} [get]
 func (s *AlumniService) GetByID(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -87,11 +88,11 @@ func (s *AlumniService) GetByID(c *fiber.Ctx) error {
 // @Tags Alumni
 // @Accept json
 // @Produce json
-// @Security ApiKeyAuth
 // @Param body body models.CreateAlumniRequest true "Data Alumni Baru (NIM, Nama, Jurusan, Email, TahunLulus)"
 // @Success 201 {object} map[string]interface{} "success response dengan data alumni baru"
 // @Failure 400 {object} map[string]interface{} "request body tidak valid atau field kosong"
 // @Failure 500 {object} map[string]interface{} "error response"
+// @Security Bearer
 // @Router /unair/alumni [post]
 func (s *AlumniService) Create(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -127,13 +128,13 @@ func (s *AlumniService) Create(c *fiber.Ctx) error {
 // @Tags Alumni
 // @Accept json
 // @Produce json
-// @Security ApiKeyAuth
 // @Param id path string true "ID Alumni (MongoDB ObjectID)"
 // @Param body body models.UpdateAlumniRequest true "Data Alumni yang Diupdate (minimal NIM, Nama, Jurusan, Email, TahunLulus)"
 // @Success 200 {object} map[string]interface{} "success response dengan data alumni yang diupdate"
 // @Failure 400 {object} map[string]interface{} "request body tidak valid atau field kosong"
 // @Failure 404 {object} map[string]interface{} "alumni tidak ditemukan"
 // @Failure 500 {object} map[string]interface{} "error response"
+// @Security Bearer
 // @Router /unair/alumni/{id} [put]
 func (s *AlumniService) Update(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -173,11 +174,11 @@ func (s *AlumniService) Update(c *fiber.Ctx) error {
 // @Tags Alumni
 // @Accept json
 // @Produce json
-// @Security ApiKeyAuth
 // @Param id path string true "ID Alumni (MongoDB ObjectID)"
 // @Success 200 {object} map[string]interface{} "success response dengan message"
 // @Failure 404 {object} map[string]interface{} "alumni tidak ditemukan"
 // @Failure 500 {object} map[string]interface{} "error response"
+// @Security Bearer
 // @Router /unair/alumni/{id} [delete]
 func (s *AlumniService) SoftDelete(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -213,10 +214,10 @@ func (s *AlumniService) SoftDelete(c *fiber.Ctx) error {
 // @Tags Alumni
 // @Accept json
 // @Produce json
-// @Security ApiKeyAuth
 // @Param id path string true "ID Alumni (MongoDB ObjectID)"
 // @Success 200 {object} map[string]interface{} "success response dengan message"
 // @Failure 500 {object} map[string]interface{} "error response"
+// @Security Bearer
 // @Router /unair/alumni/{id} [patch]
 func (s *AlumniService) Restore(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -246,6 +247,7 @@ func (s *AlumniService) Restore(c *fiber.Ctx) error {
 // @Produce json
 // @Success 200 {object} map[string]interface{} "success response dengan array data alumni tanpa pekerjaan"
 // @Failure 500 {object} map[string]interface{} "error response"
+// @Security Bearer
 // @Router /unair/alumni/without-pekerjaan [get]
 func (s *AlumniService) GetWithoutPekerjaan(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -284,6 +286,7 @@ func (s *AlumniService) GetWithoutPekerjaan(c *fiber.Ctx) error {
 // @Param search query string false "Kata kunci pencarian di semua field"
 // @Success 200 {object} models.AlumniResponse "success response dengan data alumni dan meta informasi"
 // @Failure 500 {object} map[string]interface{} "error response"
+// @Security Bearer
 // @Router /unair/alumni [get]
 func (s *AlumniService) GetAlumniService(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

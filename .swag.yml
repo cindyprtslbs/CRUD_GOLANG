@@ -1,0 +1,7 @@
+searchDir:
+  - app/service
+  - app/repository
+  - app/model
+  - .
+mainFile: main.go
+output: docs
